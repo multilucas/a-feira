@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>A Feira - Lista de Compras</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class'
+        }
+    </script>
+    <style>
+        * {
+            -webkit-user-select: none;
+            user-select: none;
+        }
+        input, textarea, button {
+            -webkit-user-select: text;
+            user-select: text;
+        }
+    </style>
+</head>
+<body class="bg-white dark:bg-gray-900 text-gray-900 dark:text-white transition-colors">
+    <!-- Container Principal -->
+    <div id="app" class="min-h-screen flex flex-col bg-white dark:bg-gray-900">
+        <!-- Header -->
+        <header class="bg-indigo-600 dark:bg-indigo-700 text-white p-4 sticky top-0 shadow-lg flex justify-between items-center">
+            <h1 class="text-2xl font-bold">A Feira</h1>
+            <button id="themeToggle" class="p-2 rounded-lg hover:bg-indigo-500 transition">
+                <span id="themeIcon">🌙</span>
+            </button>
+        </header>
+
+        <!-- Menu de Navegação -->
+        <nav class="bg-gray-100 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
+            <div class="flex overflow-x-auto">
+                <button data-page="listas" class="nav-btn flex-1 py-3 px-4 text-center font-medium hover:bg-gray-200 dark:hover:bg-gray-700 border-b-2 border-transparent hover:border-indigo-600 transition">
+                    📋 Listas
+                </button>
+                <button data-page="produtos" class="nav-btn flex-1 py-3 px-4 text-center font-medium hover:bg-gray-200 dark:hover:bg-gray-700 border-b-2 border-transparent hover:border-indigo-600 transition">
+                    📦 Produtos
+                </button>
+            </div>
+        </nav>
+
+        <!-- Conteúdo Principal -->
+        <main class="flex-1 overflow-y-auto pb-20">
+            <!-- Página: Listas -->
+            <div id="page-listas" class="page active p-4">
+                <div class="space-y-4">
+                    <button id="btnNovaLista" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-4 rounded-lg transition shadow-md">
+                        ➕ Nova Lista
+                    </button>
+                    <div id="listasContainer" class="space-y-3">
+                        <!-- Listas carregadas aqui -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- Página: Produtos -->
+            <div id="page-produtos" class="page p-4">
+                <div class="space-y-4">
+                    <button id="btnNovoProduto" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-4 rounded-lg transition shadow-md">
+                        ➕ Novo Produto
+                    </button>
+                    <div id="produtosContainer" class="space-y-3">
+                        <!-- Produtos carregados aqui -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- Página: Detalhe da Lista -->
+            <div id="page-lista-detalhe" class="page p-4 hidden">
+                <button id="btnVoltarLista" class="mb-4 text-indigo-600 dark:text-indigo-400 font-medium hover:underline">
+                    ← Voltar
+                </button>
+                <div class="space-y-4">
+                    <div class="bg-gray-100 dark:bg-gray-800 p-4 rounded-lg">
+                        <h2 id="listaDetalheNome" class="text-2xl font-bold mb-2">Lista</h2>
+                        <button id="btnAdicionarItem" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-4 rounded-lg transition">
+                            ➕ Adicionar Item
+                        </button>
+                    </div>
+                    <div id="itensContainer" class="space-y-2">
+                        <!-- Itens da lista carregados aqui -->
+                    </div>
+                    <!-- Rodapé com Totais -->
+                    <div class="fixed bottom-0 left-0 right-0 bg-white dark:bg-gray-800 border-t border-gray-300 dark:border-gray-700 p-4 shadow-lg">
+                        <div class="max-w-md mx-auto space-y-2">
+                            <div class="flex justify-between font-bold text-lg">
+                                <span>Total da Lista:</span>
+                                <span id="totalLista" class="text-indigo-600 dark:text-indigo-400">R$ 0,00</span>
+                            </div>
+                            <div class="flex justify-between font-bold text-lg">
+                                <span>Total do Carrinho:</span>
+                                <span id="totalCarrinho" class="text-green-600 dark:text-green-400">R$ 0,00</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Modal: Nova Lista -->
+    <div id="modalNovaLista" class="modal hidden fixed inset-0 bg-black/50 flex items-end z-50">
+        <div class="bg-white dark:bg-gray-800 w-full rounded-t-2xl p-6 shadow-2xl max-h-96 overflow-y-auto">
+            <h2 class="text-2xl font-bold mb-4">Nova Lista</h2>
+            <input type="text" id="inputNovaListaNome" placeholder="Nome da lista" class="w-full p-3 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 rounded-lg mb-4 focus:outline-none focus:ring-2 focus:ring-indigo-600">
+            <div class="flex gap-3">
+                <button id="btnCancelarNovaLista" class="flex-1 bg-gray-300 dark:bg-gray-600 text-gray-900 dark:text-white font-bold py-3 rounded-lg hover:bg-gray-400 dark:hover:bg-gray-500 transition">
+                    Cancelar
+                </button>
+                <button id="btnConfirmarNovaLista" class="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 rounded-lg transition">
+                    Criar
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Novo Produto -->
+    <div id="modalNovoProduto" class="modal hidden fixed inset-0 bg-black/50 flex items-end z-50">
+        <div class="bg-white dark:bg-gray-800 w-full rounded-t-2xl p-6 shadow-2xl max-h-96 overflow-y-auto">
+            <h2 class="text-2xl font-bold mb-4">Novo Produto</h2>
+            <form id="formNovoProduto" class="space-y-3">
+                <input type="text" id="inputProdutoNome" placeholder="Nome" required class="w-full p-3 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-600">
+                
+                <select id="inputProdutoCategoria" required class="w-full p-3 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-600">
+                    <option value="">Categoria</option>
+                    <option value="Frutas e Vegetais">Frutas e Vegetais</option>
+                    <option value="Carnes e Peixes">Carnes e Peixes</option>
+                    <option value="Laticínios">Laticínios</option>
+                    <option value="Bebidas">Bebidas</option>
+                    <option value="Alimentos Secos">Alimentos Secos</option>
+                    <option value="Higiene e Limpeza">Higiene e Limpeza</option>
+                    <option value="Outros">Outros</option>
+                </select>
+
+                <div class="flex gap-2">
+                    <input type="number" id="inputProdutoQuantidade" placeholder="Quantidade" required min="0" step="0.01" class="flex-1 p-3 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-600">
+                    
+                    <select id="inputProdutoUnidade" required class="flex-1 p-3 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-600">
+                        <option value="">Unidade</option>
+                        <option value="kg">kg</option>
+                        <option value="grama">grama</option>
+                        <option value="unidade">unidade</option>
+                    </select>
+                </div>
+
+                <input type="number" id="inputProdutoPreco" placeholder="Preço da unidade" required min="0" step="0.01" class="w-full p-3 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-600">
+                
+                <textarea id="inputProdutoDescricao" placeholder="Descrição (opcional)" class="w-full p-3 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-600 resize-none" rows="2"></textarea>
+
+                <div class="flex gap-3">
+                    <button type="button" id="btnCancelarNovoProduto" class="flex-1 bg-gray-300 dark:bg-gray-600 text-gray-900 dark:text-white font-bold py-3 rounded-lg hover:bg-gray-400 dark:hover:bg-gray-500 transition">
+                        Cancelar
+                    </button>
+                    <button type="submit" class="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 rounded-lg transition">
+                        Criar
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal: Adicionar Item à Lista -->
+    <div id="modalAdicionarItem" class="modal hidden fixed inset-0 bg-black/50 flex items-end z-50">
+        <div class="bg-white dark:bg-gray-800 w-full rounded-t-2xl p-6 shadow-2xl max-h-96 overflow-y-auto">
+            <h2 class="text-2xl font-bold mb-4">Adicionar Item</h2>
+            
+            <div class="mb-4">
+                <input type="text" id="inputBuscaProduto" placeholder="Buscar produto..." class="w-full p-3 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-600">
+            </div>
+
+            <div id="listaProdutosModal" class="space-y-2 mb-4 max-h-40 overflow-y-auto">
+                <!-- Produtos carregados dinamicamente -->
+            </div>
+
+            <form id="formAdicionarItem" class="space-y-3 hidden">
+                <div class="bg-gray-100 dark:bg-gray-700 p-3 rounded-lg">
+                    <p id="produtoSelecionadoNome" class="font-bold">Produto selecionado</p>
+                    <input type="hidden" id="inputProdutoIdSelecionado">
+                </div>
+                
+                <div>
+                    <label class="block text-sm font-medium mb-1">Quantidade</label>
+                    <input type="number" id="inputQuantidadeItem" required min="0.01" step="0.01" class="w-full p-3 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-600">
+                </div>
+
+                <div class="flex gap-3">
+                    <button type="button" id="btnCancelarAdicionarItem" class="flex-1 bg-gray-300 dark:bg-gray-600 text-gray-900 dark:text-white font-bold py-3 rounded-lg hover:bg-gray-400 dark:hover:bg-gray-500 transition">
+                        Cancelar
+                    </button>
+                    <button type="submit" class="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 rounded-lg transition">
+                        Adicionar
+                    </button>
+                </div>
+            </form>
+
+            <div id="formNovoProdutoRapido" class="hidden space-y-3">
+                <p class="text-sm text-gray-600 dark:text-gray-400">Produto não encontrado. Crie um novo:</p>
+                <input type="text" id="inputProdutoRapidoNome" placeholder="Nome" class="w-full p-3 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-600">
+                <select id="inputProdutoRapidoCategoria" class="w-full p-3 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-600">
+                    <option value="">Categoria</option>
+                    <option value="Frutas e Vegetais">Frutas e Vegetais</option>
+                    <option value="Carnes e Peixes">Carnes e Peixes</option>
+                    <option value="Laticínios">Laticínios</option>
+                    <option value="Bebidas">Bebidas</option>
+                    <option value="Alimentos Secos">Alimentos Secos</option>
+                    <option value="Higiene e Limpeza">Higiene e Limpeza</option>
+                    <option value="Outros">Outros</option>
+                </select>
+                <input type="number" id="inputProdutoRapidoPreco" placeholder="Preço da unidade" required min="0" step="0.01" class="w-full p-3 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-600">
+                <select id="inputProdutoRapidoUnidade" class="w-full p-3 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-600">
+                    <option value="">Unidade</option>
+                    <option value="kg">kg</option>
+                    <option value="grama">grama</option>
+                    <option value="unidade">unidade</option>
+                </select>
+                <input type="number" id="inputProdutoRapidoQuantidade" placeholder="Quantidade inicial" required min="0.01" step="0.01" value="1" class="w-full p-3 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-600">
+                
+                <div class="flex gap-3">
+                    <button type="button" id="btnCancelarProdutoRapido" class="flex-1 bg-gray-300 dark:bg-gray-600 text-gray-900 dark:text-white font-bold py-3 rounded-lg hover:bg-gray-400 dark:hover:bg-gray-500 transition">
+                        Cancelar
+                    </button>
+                    <button type="button" id="btnConfirmarProdutoRapido" class="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 rounded-lg transition">
+                        Criar e Adicionar
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Overlay para fechar modais -->
+    <div id="modalOverlay" class="hidden fixed inset-0 z-40" onclick="closeAllModals()"></div>
+
+    <script src="app.js"></script>
+</body>
+</html>
