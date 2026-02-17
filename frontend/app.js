@@ -1,6 +1,6 @@
 // ========== CONFIGURAÇÃO ==========
 
-const API_BASE = 'http://localhost:5000/api';
+const API_BASE = `${window.location.protocol}//${window.location.host}/api`;
 
 let listaAtualId = null;
 let produtosCache = [];
@@ -104,7 +104,12 @@ function openModalNovoProduto() {
     openModal('modalNovoProduto');
 }
 
-function openModalAdicionarItem() {
+async function openModalAdicionarItem() {
+    // Garantir que produtos estão carregados
+    if (produtosCache.length === 0) {
+        await loadProdutos();
+    }
+    
     document.getElementById('inputBuscaProduto').value = '';
     document.getElementById('formAdicionarItem').classList.add('hidden');
     document.getElementById('formNovoProdutoRapido').classList.add('hidden');
