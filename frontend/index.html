@@ -27,9 +27,17 @@
         <!-- Header -->
         <header class="bg-indigo-600 dark:bg-indigo-700 text-white p-4 sticky top-0 shadow-lg flex justify-between items-center">
             <h1 class="text-2xl font-bold">A Feira</h1>
-            <button id="themeToggle" class="p-2 rounded-lg hover:bg-indigo-500 transition">
-                <span id="themeIcon">🌙</span>
-            </button>
+            <div class="flex items-center gap-3">
+                <div class="text-sm">
+                    <p id="userEmail" class="font-medium">Carregando...</p>
+                </div>
+                <button id="themeToggle" class="p-2 rounded-lg hover:bg-indigo-500 transition">
+                    <span id="themeIcon">🌙</span>
+                </button>
+                <button id="logoutBtn" class="px-3 py-2 bg-red-500 hover:bg-red-600 rounded-lg transition font-medium">
+                    Sair
+                </button>
+            </div>
         </header>
 
         <!-- Menu de Navegação -->
@@ -141,10 +149,11 @@
                     <input type="number" id="inputProdutoQuantidade" placeholder="Quantidade" required min="0" step="0.01" class="flex-1 p-3 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-600">
                     
                     <select id="inputProdutoUnidade" required class="flex-1 p-3 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-600">
-                        <option value="">Unidade</option>
+                        <option value="unidade" selected>unidade</option>
                         <option value="kg">kg</option>
                         <option value="grama">grama</option>
-                        <option value="unidade">unidade</option>
+                        <option value="litro">litro</option>
+                        <option value="metro">metro</option>
                     </select>
                 </div>
 
@@ -213,10 +222,11 @@
                 </select>
                 <input type="number" id="inputProdutoRapidoPreco" placeholder="Preço da unidade" required min="0" step="0.01" class="w-full p-3 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-600">
                 <select id="inputProdutoRapidoUnidade" class="w-full p-3 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-600">
-                    <option value="">Unidade</option>
+                    <option value="unidade" selected>unidade</option>
                     <option value="kg">kg</option>
                     <option value="grama">grama</option>
-                    <option value="unidade">unidade</option>
+                    <option value="litro">litro</option>
+                    <option value="metro">metro</option>
                 </select>
                 <input type="number" id="inputProdutoRapidoQuantidade" placeholder="Quantidade inicial" required min="0.01" step="0.01" value="1" class="w-full p-3 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-600">
                 

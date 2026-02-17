@@ -4,20 +4,78 @@ const API_BASE = `${window.location.protocol}//${window.location.host}/api`;
 
 let listaAtualId = null;
 let produtosCache = [];
+let currentUser = null;
 
 // ========== INICIALIZAÇÃO ==========
 
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
+    // Checa autenticação
+    const user = await checkAuth();
+    if (!user) {
+        window.location.href = '/login.html';
+        return;
+    }
+    
+    currentUser = user;
     initTheme();
     initEventListeners();
     loadListas();
     loadProdutos();
+    updateUserInfo();
 });
+
+// ========== AUTENTICAÇÃO ==========
+
+async function checkAuth() {
+    try {
+        const response = await fetch(`${API_BASE}/auth/me`, {
+            credentials: 'include'
+        });
+        if (response.ok) {
+            return await response.json();
+        }
+        return null;
+    } catch (error) {
+        console.error('Erro ao verificar autenticação:', error);
+        return null;
+    }
+}
+
+async function logout() {
+    try {
+        await fetch(`${API_BASE}/auth/logout`, {
+            method: 'POST',
+            credentials: 'include'
+        });
+        window.location.href = '/login.html';
+    } catch (error) {
+        console.error('Erro ao fazer logout:', error);
+    }
+}
+
+function updateUserInfo() {
+    const userEmail = document.getElementById('userEmail');
+    const logoutBtn = document.getElementById('logoutBtn');
+    
+    if (userEmail && currentUser) {
+        userEmail.textContent = currentUser.email;
+    }
+    
+    if (logoutBtn) {
+        logoutBtn.addEventListener('click', logout);
+    }
+}
 
 // ========== THEME TOGGLE ==========
 
-function initTheme() {
-    const isDark = localStorage.getItem('theme') === 'dark';
+async function initTheme() {
+    // Carrega tema do usuário (do banco de dados)
+    let isDark = false;
+    if (currentUser && currentUser.theme) {
+        isDark = currentUser.theme === 'dark';
+    } else {
+        isDark = localStorage.getItem('theme') === 'dark';
+    }
     
     if (isDark) {
         document.documentElement.classList.add('dark');
@@ -25,14 +83,34 @@ function initTheme() {
     }
 }
 
-document.getElementById('themeToggle').addEventListener('click', () => {
-    const isDark = document.documentElement.classList.toggle('dark');
-    localStorage.setItem('theme', isDark ? 'dark' : 'light');
-    updateThemeIcon(isDark);
-});
+const themeToggle = document.getElementById('themeToggle');
+if (themeToggle) {
+    themeToggle.addEventListener('click', async () => {
+        const isDark = document.documentElement.classList.toggle('dark');
+        localStorage.setItem('theme', isDark ? 'dark' : 'light');
+        updateThemeIcon(isDark);
+        
+        // Salva preferência no servidor
+        if (currentUser) {
+            try {
+                await fetch(`${API_BASE}/auth/theme`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'include',
+                    body: JSON.stringify({ theme: isDark ? 'dark' : 'light' })
+                });
+            } catch (error) {
+                console.error('Erro ao salvar tema:', error);
+            }
+        }
+    });
+}
 
 function updateThemeIcon(isDark) {
-    document.getElementById('themeIcon').textContent = isDark ? '☀️' : '🌙';
+    const themeIcon = document.getElementById('themeIcon');
+    if (themeIcon) {
+        themeIcon.textContent = isDark ? '☀️' : '🌙';
+    }
 }
 
 // ========== NAVEGAÇÃO ==========
@@ -134,7 +212,9 @@ function closeAllModals() {
 
 async function loadListas() {
     try {
-        const response = await fetch(`${API_BASE}/listas`);
+        const response = await fetch(`${API_BASE}/listas`, {
+            credentials: 'include'
+        });
         const listas = await response.json();
         renderListas(listas);
     } catch (error) {
@@ -175,6 +255,7 @@ async function criarNovaLista() {
         const response = await fetch(`${API_BASE}/listas`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
             body: JSON.stringify({ nome })
         });
 
@@ -194,7 +275,14 @@ async function abrirLista(listaId) {
     listaAtualId = listaId;
     
     try {
-        const response = await fetch(`${API_BASE}/listas/${listaId}`);
+        // Garante que produtos estão em cache
+        if (produtosCache.length === 0) {
+            await loadProdutos();
+        }
+        
+        const response = await fetch(`${API_BASE}/listas/${listaId}`, {
+            credentials: 'include'
+        });
         const lista = await response.json();
         
         document.getElementById('listaDetalheNome').textContent = lista.nome;
@@ -216,7 +304,10 @@ function renderItensLista(lista) {
 
     container.innerHTML = lista.itens.map(item => {
         const produto = produtosCache.find(p => p.id === item.produto_id);
-        if (!produto) return '';
+        if (!produto) {
+            console.warn(`Produto ${item.produto_id} não encontrado no cache`);
+            return '';
+        }
 
         const valor = (produto.preco_unidade * item.quantidade).toFixed(2);
         const checked = item.checked ? 'checked' : '';
@@ -288,7 +379,8 @@ function calcularTotais(itens) {
 async function toggleItem(listaId, produtoId) {
     try {
         const response = await fetch(`${API_BASE}/listas/${listaId}/itens/${produtoId}/toggle`, {
-            method: 'PUT'
+            method: 'PUT',
+            credentials: 'include'
         });
 
         if (response.ok) {
@@ -311,6 +403,7 @@ async function updateQuantidade(listaId, produtoId, novaQuantidade) {
         const response = await fetch(`${API_BASE}/listas/${listaId}/itens/${produtoId}/quantidade`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
             body: JSON.stringify({ quantidade: parseFloat(novaQuantidade) })
         });
 
@@ -328,7 +421,8 @@ async function removeItem(listaId, produtoId) {
 
     try {
         const response = await fetch(`${API_BASE}/listas/${listaId}/itens/${produtoId}`, {
-            method: 'DELETE'
+            method: 'DELETE',
+            credentials: 'include'
         });
 
         if (response.ok) {
@@ -342,7 +436,9 @@ async function removeItem(listaId, produtoId) {
 
 async function loadLista(listaId) {
     try {
-        const response = await fetch(`${API_BASE}/listas/${listaId}`);
+        const response = await fetch(`${API_BASE}/listas/${listaId}`, {
+            credentials: 'include'
+        });
         const lista = await response.json();
         renderItensLista(lista);
     } catch (error) {
@@ -354,7 +450,9 @@ async function loadLista(listaId) {
 
 async function loadProdutos() {
     try {
-        const response = await fetch(`${API_BASE}/produtos`);
+        const response = await fetch(`${API_BASE}/produtos`, {
+            credentials: 'include'
+        });
         produtosCache = await response.json();
         renderProdutos(produtosCache);
     } catch (error) {
@@ -416,6 +514,7 @@ async function criarNovoProduto(e) {
         const response = await fetch(`${API_BASE}/produtos`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
             body: JSON.stringify(formData)
         });
 
@@ -436,7 +535,8 @@ async function deleteProduto(produtoId) {
 
     try {
         const response = await fetch(`${API_BASE}/produtos/${produtoId}`, {
-            method: 'DELETE'
+            method: 'DELETE',
+            credentials: 'include'
         });
 
         if (response.ok) {
@@ -510,18 +610,20 @@ async function criarProdutoRapido() {
         const response = await fetch(`${API_BASE}/produtos`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
             body: JSON.stringify(formData)
         });
 
         if (response.ok) {
             const novoProduto = await response.json();
-            loadProdutos();
+            await loadProdutos();  // Espera produtos carregarem
             
             // Adiciona à lista automaticamente
             const quantidadeItem = parseFloat(document.getElementById('inputQuantidadeItem').value) || formData.quantidade;
             await fetch(`${API_BASE}/listas/${listaAtualId}/itens`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
                 body: JSON.stringify({ produto_id: novoProduto.id, quantidade: quantidadeItem })
             });
 
@@ -549,17 +651,21 @@ async function adicionarItemLista(e) {
         const response = await fetch(`${API_BASE}/listas/${listaAtualId}/itens`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
             body: JSON.stringify({ produto_id: produtoId, quantidade })
         });
+
+        const data = await response.json();
 
         if (response.ok) {
             closeAllModals();
             loadLista(listaAtualId);
         } else {
-            alert('Erro ao adicionar item');
+            console.error('Erro ao adicionar:', data);
+            alert('Erro ao adicionar item: ' + (data.error || 'Desconhecido'));
         }
     } catch (error) {
         console.error('Erro:', error);
-        alert('Erro ao adicionar item');
+        alert('Erro ao adicionar item: ' + error.message);
     }
 }
