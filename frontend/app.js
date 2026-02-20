@@ -20,7 +20,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     initTheme();
     initEventListeners();
     loadListas();
-    loadProdutos();
     updateUserInfo();
 });
 
@@ -54,11 +53,11 @@ async function logout() {
 }
 
 function updateUserInfo() {
-    const userEmail = document.getElementById('userEmail');
+    const userGreeting = document.getElementById('userGreeting');
     const logoutBtn = document.getElementById('logoutBtn');
     
-    if (userEmail && currentUser) {
-        userEmail.textContent = currentUser.email;
+    if (userGreeting && currentUser && currentUser.first_name) {
+        userGreeting.innerHTML = `<span>Bem vindo,</span><br><span class="font-bold">${currentUser.first_name}</span>`;
     }
     
     if (logoutBtn) {
@@ -116,16 +115,8 @@ function updateThemeIcon(isDark) {
 // ========== NAVEGAÇÃO ==========
 
 function initEventListeners() {
-    // Navegação
-    document.querySelectorAll('.nav-btn').forEach(btn => {
-        btn.addEventListener('click', (e) => {
-            switchPage(e.target.closest('.nav-btn').dataset.page);
-        });
-    });
-
     // Botões principais
     document.getElementById('btnNovaLista').addEventListener('click', openModalNovaLista);
-    document.getElementById('btnNovoProduto').addEventListener('click', openModalNovoProduto);
     document.getElementById('btnAdicionarItem').addEventListener('click', openModalAdicionarItem);
 
     // Modal: Nova Lista
@@ -135,6 +126,11 @@ function initEventListeners() {
     // Modal: Novo Produto
     document.getElementById('formNovoProduto').addEventListener('submit', criarNovoProduto);
     document.getElementById('btnCancelarNovoProduto').addEventListener('click', closeAllModals);
+
+    // Modal: Editar Item
+    document.getElementById('formEditarItem').addEventListener('submit', salvarEdicaoItem);
+    document.getElementById('btnCancelarEditarItem').addEventListener('click', closeAllModals);
+    document.getElementById('btnDeletarItem').addEventListener('click', deletarItemModal);
 
     // Modal: Adicionar Item
     document.getElementById('inputBuscaProduto').addEventListener('input', buscarProdutosModal);
@@ -155,19 +151,9 @@ function switchPage(pageName) {
     });
     
     document.getElementById(`page-${pageName}`).classList.remove('hidden');
-    
-    // Atualiza navegação ativa
-    document.querySelectorAll('.nav-btn').forEach(btn => {
-        if (btn.dataset.page === pageName) {
-            btn.classList.add('border-indigo-600');
-        } else {
-            btn.classList.remove('border-indigo-600');
-        }
-    });
 
     // Recarrega dados se necessário
     if (pageName === 'listas') loadListas();
-    if (pageName === 'produtos') loadProdutos();
 }
 
 // ========== MODAIS ==========
@@ -179,6 +165,33 @@ function openModalNovaLista() {
 
 function openModalNovoProduto() {
     document.getElementById('formNovoProduto').reset();
+    document.getElementById('inputProdutoId').value = '';
+    document.getElementById('modalNovoProdutoTitulo').textContent = 'Novo Produto';
+    document.getElementById('btnSalvarProduto').textContent = 'Criar';
+    openModal('modalNovoProduto');
+}
+
+function editarProduto(produtoId) {
+    const produto = produtosCache.find(p => p.id == produtoId);
+    
+    if (!produto) {
+        alert('Produto não encontrado');
+        return;
+    }
+    
+    // Preencher o formulário com os dados do produto
+    document.getElementById('inputProdutoId').value = produto.id;
+    document.getElementById('inputProdutoNome').value = produto.nome;
+    document.getElementById('inputProdutoCategoria').value = produto.categoria;
+    document.getElementById('inputProdutoQuantidade').value = produto.quantidade;
+    document.getElementById('inputProdutoUnidade').value = produto.unidade;
+    document.getElementById('inputProdutoPreco').value = produto.preco_unidade;
+    document.getElementById('inputProdutoDescricao').value = produto.descricao || '';
+    
+    // Mudar título e botão para modo edição
+    document.getElementById('modalNovoProdutoTitulo').textContent = `Editar: ${produto.nome}`;
+    document.getElementById('btnSalvarProduto').textContent = 'Salvar Alterações';
+    
     openModal('modalNovoProduto');
 }
 
@@ -310,29 +323,20 @@ function renderItensLista(lista) {
         }
 
         const valor = (produto.preco_unidade * item.quantidade).toFixed(2);
-        const checked = item.checked ? 'checked' : '';
 
         return `
-            <div class="bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg p-4 flex gap-3 items-center">
+            <div class="bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg p-4 cursor-pointer hover:shadow-md hover:border-indigo-500 transition flex gap-3 items-center" onclick="abrirModalEditarItem('${listaAtualId}', '${item.produto_id}')">
                 <input 
                     type="checkbox" 
-                    ${checked}
-                    onchange="toggleItem('${listaAtualId}', '${item.produto_id}')"
+                    ${item.checked ? 'checked' : ''}
+                    onclick="event.stopPropagation(); toggleItem('${listaAtualId}', '${item.produto_id}')"
                     class="w-6 h-6 rounded cursor-pointer"
                 >
                 
                 <div class="flex-1 min-w-0">
-                    <h4 class="font-bold">${produto.nome}</h4>
+                    <h4 class="font-bold ${item.checked ? 'line-through text-gray-400' : ''}">${produto.nome}</h4>
                     <div class="flex gap-2 text-sm text-gray-600 dark:text-gray-400">
-                        <input 
-                            type="number" 
-                            value="${item.quantidade}"
-                            onchange="updateQuantidade('${listaAtualId}', '${item.produto_id}', this.value)"
-                            min="0.01"
-                            step="0.01"
-                            class="w-16 p-1 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 rounded"
-                        >
-                        <span>${produto.unidade}</span>
+                        <span>${item.quantidade} ${produto.unidade}</span>
                         <span>@</span>
                         <span>R$ ${produto.preco_unidade.toFixed(2)}</span>
                     </div>
@@ -340,12 +344,6 @@ function renderItensLista(lista) {
 
                 <div class="text-right">
                     <p class="font-bold text-lg">R$ ${valor}</p>
-                    <button 
-                        onclick="removeItem('${listaAtualId}', '${item.produto_id}')"
-                        class="text-red-500 hover:text-red-700 text-sm font-medium"
-                    >
-                        Remover
-                    </button>
                 </div>
             </div>
         `;
@@ -469,7 +467,7 @@ function renderProdutos(produtos) {
     }
 
     container.innerHTML = produtos.map(produto => `
-        <div class="bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg p-4">
+        <div class="bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg p-4 cursor-pointer hover:shadow-lg hover:border-indigo-500 transition" onclick="editarProduto('${produto.id}')">
             <h3 class="font-bold text-lg">${produto.nome}</h3>
             <p class="text-sm text-gray-600 dark:text-gray-400 mb-2">${produto.categoria}</p>
             
@@ -486,7 +484,7 @@ function renderProdutos(produtos) {
 
             ${produto.descricao ? `<p class="text-sm text-gray-600 dark:text-gray-400 mb-3">${produto.descricao}</p>` : ''}
 
-            <button onclick="deleteProduto('${produto.id}')" class="w-full bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-3 rounded-lg transition">
+            <button onclick="event.stopPropagation(); deleteProduto('${produto.id}')" class="w-full bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-3 rounded-lg transition">
                 🗑️ Deletar
             </button>
         </div>
@@ -496,6 +494,7 @@ function renderProdutos(produtos) {
 async function criarNovoProduto(e) {
     e.preventDefault();
 
+    const produtoId = document.getElementById('inputProdutoId').value;
     const formData = {
         nome: document.getElementById('inputProdutoNome').value,
         categoria: document.getElementById('inputProdutoCategoria').value,
@@ -511,8 +510,12 @@ async function criarNovoProduto(e) {
     }
 
     try {
-        const response = await fetch(`${API_BASE}/produtos`, {
-            method: 'POST',
+        // Se tem ID, é edição; senão, é criação
+        const method = produtoId ? 'PUT' : 'POST';
+        const url = produtoId ? `${API_BASE}/produtos/${produtoId}` : `${API_BASE}/produtos`;
+
+        const response = await fetch(url, {
+            method: method,
             headers: { 'Content-Type': 'application/json' },
             credentials: 'include',
             body: JSON.stringify(formData)
@@ -522,11 +525,12 @@ async function criarNovoProduto(e) {
             closeAllModals();
             loadProdutos();
         } else {
-            alert('Erro ao criar produto');
+            const data = await response.json();
+            alert(`Erro: ${data.error || 'Não foi possível salvar o produto'}`);
         }
     } catch (error) {
         console.error('Erro:', error);
-        alert('Erro ao criar produto');
+        alert('Erro ao salvar produto');
     }
 }
 
@@ -547,6 +551,117 @@ async function deleteProduto(produtoId) {
     } catch (error) {
         console.error('Erro:', error);
         alert('Erro ao deletar produto');
+    }
+}
+
+// ========== EDIÇÃO DE ITENS DA LISTA ==========
+
+function abrirModalEditarItem(listaId, produtoId) {
+    const item = listaAtualId && listaAtualId === parseInt(listaId) 
+        ? document.querySelector(`div[onclick="abrirModalEditarItem('${listaId}', '${produtoId}')"]`)
+        : null;
+    
+    // Buscar item nos dados
+    let itemData = null;
+    let listaData = null;
+    
+    // Carrega lista completa para achar o item
+    const listaElement = document.getElementById('listaDetalheNome');
+    if (listaElement) {
+        fetch(`${API_BASE}/listas/${listaId}`, { credentials: 'include' })
+            .then(r => r.json())
+            .then(lista => {
+                listaData = lista;
+                itemData = lista.itens.find(i => i.produto_id === parseInt(produtoId));
+                
+                if (!itemData) {
+                    alert('Item não encontrado');
+                    return;
+                }
+
+                const produto = produtosCache.find(p => p.id === parseInt(produtoId));
+                if (!produto) {
+                    alert('Produto não encontrado');
+                    return;
+                }
+
+                // Preencher modal
+                document.getElementById('inputEditarItemId').value = parseInt(produtoId);
+                document.getElementById('inputEditarItemListaId').value = parseInt(listaId);
+                document.getElementById('editarItemProdutoNome').textContent = produto.nome;
+                document.getElementById('inputEditarItemQuantidade').value = itemData.quantidade;
+                document.getElementById('inputEditarItemChecked').checked = itemData.checked;
+
+                openModal('modalEditarItem');
+            })
+            .catch(err => {
+                console.error('Erro:', err);
+                alert('Erro ao carregar item');
+            });
+    }
+}
+
+async function salvarEdicaoItem(e) {
+    e.preventDefault();
+
+    const listaId = parseInt(document.getElementById('inputEditarItemListaId').value);
+    const produtoId = parseInt(document.getElementById('inputEditarItemId').value);
+    const quantidade = parseFloat(document.getElementById('inputEditarItemQuantidade').value);
+    const checkedAtual = document.getElementById('inputEditarItemChecked').checked;
+
+    if (quantidade <= 0) {
+        alert('Quantidade deve ser maior que 0');
+        return;
+    }
+
+    try {
+        // Atualizar quantidade
+        await fetch(`${API_BASE}/listas/${listaId}/itens/${produtoId}/quantidade`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({ quantidade })
+        });
+
+        // Se checkbox foi alterado, fazer toggle
+        // Preciso buscar o estado original para saber se mudou
+        const listaResp = await fetch(`${API_BASE}/listas/${listaId}`, { credentials: 'include' });
+        const lista = await listaResp.json();
+        const itemOriginal = lista.itens.find(i => i.produto_id === produtoId);
+        
+        if (itemOriginal && itemOriginal.checked !== checkedAtual) {
+            await toggleItem(listaId, produtoId);
+        }
+
+        closeAllModals();
+        loadLista(listaId);
+    } catch (error) {
+        console.error('Erro:', error);
+        alert('Erro ao salvar item');
+    }
+}
+
+async function deletarItemModal() {
+    const listaId = parseInt(document.getElementById('inputEditarItemListaId').value);
+    const produtoId = parseInt(document.getElementById('inputEditarItemId').value);
+
+    if (!confirm('Deletar este item?')) return;
+
+    try {
+        const response = await fetch(`${API_BASE}/listas/${listaId}/itens/${produtoId}`, {
+            method: 'DELETE',
+            credentials: 'include'
+        });
+
+        if (response.ok) {
+            closeAllModals();
+            loadLista(listaId);
+        } else {
+            alert('Erro ao deletar item');
+        }
+    } catch (error) {
+        console.error('Erro:', error);
+        alert('Erro ao deletar item');
     }
 }
 

@@ -125,7 +125,29 @@ DELETE /api/listas/<id>/itens/<prod_id>         # Remover item
 
 Para testes: Use o navegador DevTools ou curl.
 
-## 🛠️ Desenvolvimento
+## � Deploy
+
+### Versão Rápida (PythonAnywhere - Recomendado)
+
+A aplicação está **pronta para deploy** na versão gratuita do PythonAnywhere.
+
+**Tempo total: ~30 minutos**
+
+Veja guia completo em: [`PYTHONANYWHERE_DEPLOYMENT.md`](./PYTHONANYWHERE_DEPLOYMENT.md)
+
+Checklist rápido em: [`PYTHONANYWHERE_CHECKLIST.md`](./PYTHONANYWHERE_CHECKLIST.md)
+
+**Resumo dos passos:**
+1. Crie conta em https://www.pythonanywhere.com
+2. Clone o repositório via Git
+3. Crie virtualenv com Python 3.13
+4. Configure WSGI manual
+5. Configure arquivos estáticos
+6. Clique em Reload
+
+**Resultado:** Sua app em `https://seuusername.pythonanywhere.com`
+
+## �🛠️ Desenvolvimento
 
 ### Adicionar Nova Feature
 

@@ -11,6 +11,8 @@ class User(db.Model):
     
     id = db.Column(db.Integer, primary_key=True)
     email = db.Column(db.String(120), unique=True, nullable=False, index=True)
+    first_name = db.Column(db.String(120), nullable=True)
+    last_name = db.Column(db.String(120), nullable=True)
     password_hash = db.Column(db.String(255), nullable=False)
     theme = db.Column(db.String(10), default='light')  # 'light' ou 'dark'
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
@@ -31,6 +33,8 @@ class User(db.Model):
         return {
             'id': self.id,
             'email': self.email,
+            'first_name': self.first_name,
+            'last_name': self.last_name,
             'theme': self.theme,
             'created_at': self.created_at.isoformat()
         }

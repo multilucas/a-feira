@@ -58,11 +58,16 @@ def register():
     try:
         data = request.get_json()
         email = data.get('email', '').strip().lower()
+        first_name = data.get('first_name', '').strip()
+        last_name = data.get('last_name', '').strip()
         password = data.get('password', '')
         
         # Validação
         if not email or not password:
             return jsonify({"error": "Email e senha obrigatórios"}), 400
+        
+        if not first_name or not last_name:
+            return jsonify({"error": "Nome e sobrenome obrigatórios"}), 400
         
         if len(password) < 6:
             return jsonify({"error": "Senha deve ter mínimo 6 caracteres"}), 400
@@ -71,7 +76,7 @@ def register():
             return jsonify({"error": "Email já registrado"}), 400
         
         # Cria usuário
-        user = User(email=email)
+        user = User(email=email, first_name=first_name, last_name=last_name)
         user.set_password(password)
         
         db.session.add(user)
@@ -210,6 +215,42 @@ def delete_produto(produto_id):
         
         return jsonify({"message": "Produto deletado"}), 200
     
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/produtos/<int:produto_id>', methods=['PUT'])
+@login_required
+def update_produto(produto_id):
+    """Atualiza produto existente"""
+    try:
+        produto = Product.query.filter_by(id=produto_id, user_id=request.user.id).first()
+        
+        if not produto:
+            return jsonify({"error": "Produto não encontrado"}), 404
+        
+        data = request.get_json()
+        
+        # Validar campos obrigatórios se fornecidos
+        required_fields = ['nome', 'categoria', 'quantidade', 'unidade', 'preco_unidade']
+        if not all(field in data for field in required_fields):
+            return jsonify({"error": "Campos obrigatórios faltando"}), 400
+        
+        # Atualizar campos
+        produto.nome = data['nome'].strip()
+        produto.categoria = data['categoria'].strip()
+        produto.quantidade = float(data['quantidade'])
+        produto.unidade = data['unidade']
+        produto.preco_unidade = float(data['preco_unidade'])
+        produto.descricao = data.get('descricao', '').strip()
+        
+        db.session.commit()
+        
+        return jsonify(produto.to_dict()), 200
+    
+    except ValueError as e:
+        return jsonify({"error": f"Erro de validação: {str(e)}"}), 400
     except Exception as e:
         db.session.rollback()
         return jsonify({"error": str(e)}), 500
