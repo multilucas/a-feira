@@ -215,6 +215,42 @@ def delete_produto(produto_id):
         return jsonify({"error": str(e)}), 500
 
 
+@app.route('/api/produtos/<int:produto_id>', methods=['PUT'])
+@login_required
+def update_produto(produto_id):
+    """Atualiza produto existente"""
+    try:
+        produto = Product.query.filter_by(id=produto_id, user_id=request.user.id).first()
+        
+        if not produto:
+            return jsonify({"error": "Produto não encontrado"}), 404
+        
+        data = request.get_json()
+        
+        # Validar campos obrigatórios se fornecidos
+        required_fields = ['nome', 'categoria', 'quantidade', 'unidade', 'preco_unidade']
+        if not all(field in data for field in required_fields):
+            return jsonify({"error": "Campos obrigatórios faltando"}), 400
+        
+        # Atualizar campos
+        produto.nome = data['nome'].strip()
+        produto.categoria = data['categoria'].strip()
+        produto.quantidade = float(data['quantidade'])
+        produto.unidade = data['unidade']
+        produto.preco_unidade = float(data['preco_unidade'])
+        produto.descricao = data.get('descricao', '').strip()
+        
+        db.session.commit()
+        
+        return jsonify(produto.to_dict()), 200
+    
+    except ValueError as e:
+        return jsonify({"error": f"Erro de validação: {str(e)}"}), 400
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": str(e)}), 500
+
+
 # ========== LISTAS ==========
 
 @app.route('/api/listas', methods=['GET'])

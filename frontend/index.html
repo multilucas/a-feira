@@ -130,8 +130,9 @@
     <!-- Modal: Novo Produto -->
     <div id="modalNovoProduto" class="modal hidden fixed inset-0 bg-black/50 flex items-end z-50">
         <div class="bg-white dark:bg-gray-800 w-full rounded-t-2xl p-6 shadow-2xl max-h-96 overflow-y-auto">
-            <h2 class="text-2xl font-bold mb-4">Novo Produto</h2>
+            <h2 id="modalNovoProdutoTitulo" class="text-2xl font-bold mb-4">Novo Produto</h2>
             <form id="formNovoProduto" class="space-y-3">
+                <input type="hidden" id="inputProdutoId">
                 <input type="text" id="inputProdutoNome" placeholder="Nome" required class="w-full p-3 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-600">
                 
                 <select id="inputProdutoCategoria" required class="w-full p-3 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-600">
@@ -165,8 +166,45 @@
                     <button type="button" id="btnCancelarNovoProduto" class="flex-1 bg-gray-300 dark:bg-gray-600 text-gray-900 dark:text-white font-bold py-3 rounded-lg hover:bg-gray-400 dark:hover:bg-gray-500 transition">
                         Cancelar
                     </button>
-                    <button type="submit" class="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 rounded-lg transition">
+                    <button type="submit" id="btnSalvarProduto" class="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 rounded-lg transition">
                         Criar
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal: Editar Item da Lista -->
+    <div id="modalEditarItem" class="modal hidden fixed inset-0 bg-black/50 flex items-end z-50">
+        <div class="bg-white dark:bg-gray-800 w-full rounded-t-2xl p-6 shadow-2xl max-h-96 overflow-y-auto">
+            <h2 class="text-2xl font-bold mb-4">Editar Item</h2>
+            <form id="formEditarItem" class="space-y-3">
+                <input type="hidden" id="inputEditarItemId">
+                <input type="hidden" id="inputEditarItemListaId">
+                
+                <div class="bg-gray-100 dark:bg-gray-700 p-3 rounded-lg">
+                    <p id="editarItemProdutoNome" class="font-bold">Produto</p>
+                </div>
+                
+                <div>
+                    <label class="block text-sm font-medium mb-1">Quantidade</label>
+                    <input type="number" id="inputEditarItemQuantidade" required min="0.01" step="0.01" class="w-full p-3 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-600">
+                </div>
+
+                <div class="flex items-center gap-2">
+                    <input type="checkbox" id="inputEditarItemChecked" class="w-4 h-4">
+                    <label for="inputEditarItemChecked" class="text-sm">Item comprado</label>
+                </div>
+
+                <div class="flex gap-3">
+                    <button type="button" id="btnCancelarEditarItem" class="flex-1 bg-gray-300 dark:bg-gray-600 text-gray-900 dark:text-white font-bold py-3 rounded-lg hover:bg-gray-400 dark:hover:bg-gray-500 transition">
+                        Cancelar
+                    </button>
+                    <button type="button" id="btnDeletarItem" class="flex-1 bg-red-500 hover:bg-red-600 text-white font-bold py-3 rounded-lg transition">
+                        🗑️ Deletar
+                    </button>
+                    <button type="submit" class="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 rounded-lg transition">
+                        Salvar
                     </button>
                 </div>
             </form>
