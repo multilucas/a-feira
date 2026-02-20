@@ -543,7 +543,6 @@ async function criarNovoProduto(e) {
         if (response.ok) {
             closeAllModals();
             loadProdutos();
-            alert(produtoId ? 'Produto atualizado com sucesso!' : 'Produto criado com sucesso!');
         } else {
             const data = await response.json();
             alert(`Erro: ${data.error || 'Não foi possível salvar o produto'}`);
