@@ -20,7 +20,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     initTheme();
     initEventListeners();
     loadListas();
-    loadProdutos();
     updateUserInfo();
 });
 
@@ -54,11 +53,11 @@ async function logout() {
 }
 
 function updateUserInfo() {
-    const userEmail = document.getElementById('userEmail');
+    const userGreeting = document.getElementById('userGreeting');
     const logoutBtn = document.getElementById('logoutBtn');
     
-    if (userEmail && currentUser) {
-        userEmail.textContent = currentUser.email;
+    if (userGreeting && currentUser && currentUser.first_name) {
+        userGreeting.innerHTML = `<span>Bem vindo,</span><br><span class="font-bold">${currentUser.first_name}</span>`;
     }
     
     if (logoutBtn) {
@@ -116,16 +115,8 @@ function updateThemeIcon(isDark) {
 // ========== NAVEGAÇÃO ==========
 
 function initEventListeners() {
-    // Navegação
-    document.querySelectorAll('.nav-btn').forEach(btn => {
-        btn.addEventListener('click', (e) => {
-            switchPage(e.target.closest('.nav-btn').dataset.page);
-        });
-    });
-
     // Botões principais
     document.getElementById('btnNovaLista').addEventListener('click', openModalNovaLista);
-    document.getElementById('btnNovoProduto').addEventListener('click', openModalNovoProduto);
     document.getElementById('btnAdicionarItem').addEventListener('click', openModalAdicionarItem);
 
     // Modal: Nova Lista
@@ -160,19 +151,9 @@ function switchPage(pageName) {
     });
     
     document.getElementById(`page-${pageName}`).classList.remove('hidden');
-    
-    // Atualiza navegação ativa
-    document.querySelectorAll('.nav-btn').forEach(btn => {
-        if (btn.dataset.page === pageName) {
-            btn.classList.add('border-indigo-600');
-        } else {
-            btn.classList.remove('border-indigo-600');
-        }
-    });
 
     // Recarrega dados se necessário
     if (pageName === 'listas') loadListas();
-    if (pageName === 'produtos') loadProdutos();
 }
 
 // ========== MODAIS ==========

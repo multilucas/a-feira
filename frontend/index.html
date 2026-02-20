@@ -28,8 +28,8 @@
         <header class="bg-indigo-600 dark:bg-indigo-700 text-white p-4 sticky top-0 shadow-lg flex justify-between items-center">
             <h1 class="text-2xl font-bold">A Feira</h1>
             <div class="flex items-center gap-3">
-                <div class="text-sm">
-                    <p id="userEmail" class="font-medium">Carregando...</p>
+                <div class="text-sm text-right">
+                    <p id="userGreeting" class="font-medium">Carregando...</p>
                 </div>
                 <button id="themeToggle" class="p-2 rounded-lg hover:bg-indigo-500 transition">
                     <span id="themeIcon">🌙</span>
@@ -40,40 +40,17 @@
             </div>
         </header>
 
-        <!-- Menu de Navegação -->
-        <nav class="bg-gray-100 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
-            <div class="flex overflow-x-auto">
-                <button data-page="listas" class="nav-btn flex-1 py-3 px-4 text-center font-medium hover:bg-gray-200 dark:hover:bg-gray-700 border-b-2 border-transparent hover:border-indigo-600 transition">
-                    📋 Listas
-                </button>
-                <button data-page="produtos" class="nav-btn flex-1 py-3 px-4 text-center font-medium hover:bg-gray-200 dark:hover:bg-gray-700 border-b-2 border-transparent hover:border-indigo-600 transition">
-                    📦 Produtos
-                </button>
-            </div>
-        </nav>
-
         <!-- Conteúdo Principal -->
         <main class="flex-1 overflow-y-auto pb-20">
             <!-- Página: Listas -->
             <div id="page-listas" class="page active p-4">
+                <h1 class="text-3xl font-bold mb-4">Listas</h1>
                 <div class="space-y-4">
                     <button id="btnNovaLista" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-4 rounded-lg transition shadow-md">
                         ➕ Nova Lista
                     </button>
                     <div id="listasContainer" class="space-y-3">
                         <!-- Listas carregadas aqui -->
-                    </div>
-                </div>
-            </div>
-
-            <!-- Página: Produtos -->
-            <div id="page-produtos" class="page p-4">
-                <div class="space-y-4">
-                    <button id="btnNovoProduto" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-4 rounded-lg transition shadow-md">
-                        ➕ Novo Produto
-                    </button>
-                    <div id="produtosContainer" class="space-y-3">
-                        <!-- Produtos carregados aqui -->
                     </div>
                 </div>
             </div>

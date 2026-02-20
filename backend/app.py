@@ -58,11 +58,16 @@ def register():
     try:
         data = request.get_json()
         email = data.get('email', '').strip().lower()
+        first_name = data.get('first_name', '').strip()
+        last_name = data.get('last_name', '').strip()
         password = data.get('password', '')
         
         # Validação
         if not email or not password:
             return jsonify({"error": "Email e senha obrigatórios"}), 400
+        
+        if not first_name or not last_name:
+            return jsonify({"error": "Nome e sobrenome obrigatórios"}), 400
         
         if len(password) < 6:
             return jsonify({"error": "Senha deve ter mínimo 6 caracteres"}), 400
@@ -71,7 +76,7 @@ def register():
             return jsonify({"error": "Email já registrado"}), 400
         
         # Cria usuário
-        user = User(email=email)
+        user = User(email=email, first_name=first_name, last_name=last_name)
         user.set_password(password)
         
         db.session.add(user)
