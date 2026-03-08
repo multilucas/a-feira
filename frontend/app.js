@@ -495,16 +495,17 @@ async function criarNovoProduto(e) {
     e.preventDefault();
 
     const produtoId = document.getElementById('inputProdutoId').value;
+    const precoBruto = document.getElementById('inputProdutoPreco').value;
     const formData = {
         nome: document.getElementById('inputProdutoNome').value,
         categoria: document.getElementById('inputProdutoCategoria').value,
         quantidade: parseFloat(document.getElementById('inputProdutoQuantidade').value),
         unidade: document.getElementById('inputProdutoUnidade').value,
-        preco_unidade: parseFloat(document.getElementById('inputProdutoPreco').value),
+        preco_unidade: precoBruto === "" ? 0 : parseFloat(precoBruto),
         descricao: document.getElementById('inputProdutoDescricao').value
     };
 
-    if (!formData.nome || !formData.categoria || !formData.unidade || !formData.preco_unidade) {
+    if (!formData.nome || !formData.categoria || !formData.unidade) {
         alert('Preencha todos os campos obrigatórios');
         return;
     }
@@ -708,15 +709,16 @@ function showFormNovoProdutoRapido(termo) {
 }
 
 async function criarProdutoRapido() {
+    const precoBruto = document.getElementById('inputProdutoPreco').value;
     const formData = {
         nome: document.getElementById('inputProdutoRapidoNome').value,
         categoria: document.getElementById('inputProdutoRapidoCategoria').value,
         quantidade: parseFloat(document.getElementById('inputProdutoRapidoQuantidade').value),
         unidade: document.getElementById('inputProdutoRapidoUnidade').value,
-        preco_unidade: parseFloat(document.getElementById('inputProdutoRapidoPreco').value)
+        preco_unidade: precoBruto === "" ? 0 : parseFloat(precoBruto)
     };
 
-    if (!formData.nome || !formData.categoria || !formData.unidade || !formData.preco_unidade) {
+    if (!formData.nome || !formData.categoria || !formData.unidade) {
         alert('Preencha todos os campos obrigatórios');
         return;
     }

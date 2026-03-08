@@ -51,7 +51,7 @@ class Product(db.Model):
     categoria = db.Column(db.String(50), nullable=False)
     quantidade = db.Column(db.Float, nullable=False)
     unidade = db.Column(db.String(20), nullable=False)
-    preco_unidade = db.Column(db.Float, nullable=False)
+    preco_unidade = db.Column(db.Float, nullable=False, default=0.0)
     descricao = db.Column(db.Text, default='')
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     
