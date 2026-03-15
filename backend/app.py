@@ -413,6 +413,10 @@ def update_item_quantidade(lista_id, produto_id):
             return jsonify({"error": "Item não encontrado"}), 404
         
         item.quantidade = float(data['quantidade'])
+        
+        if 'preco_unidade' in data:
+            item.produto.preco_unidade = float(data['preco_unidade'])
+        
         db.session.commit()
         
         return jsonify(lista.to_dict()), 200
