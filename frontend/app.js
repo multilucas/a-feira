@@ -452,7 +452,10 @@ async function loadProdutos() {
             credentials: 'include'
         });
         produtosCache = await response.json();
-        renderProdutos(produtosCache);
+        const container = document.getElementById('produtosContainer');
+        if (container) {
+            renderProdutos(produtosCache);
+        }
     } catch (error) {
         console.error('Erro ao carregar produtos:', error);
     }
@@ -652,8 +655,10 @@ async function salvarEdicaoItem(e) {
         
         console.log('[SAVE_ITEM] Item salvo com sucesso');
 
+        // Atualizar cache de produtos para refletir novo preço
+        await loadProdutos();
+
         // Se checkbox foi alterado, fazer toggle
-        // Preciso buscar o estado original para saber se mudou
         const listaResp = await fetch(`${API_BASE}/listas/${listaId}`, { credentials: 'include' });
         const lista = await listaResp.json();
         const itemOriginal = lista.itens.find(i => i.produto_id === produtoId);
@@ -737,7 +742,7 @@ function showFormNovoProdutoRapido(termo) {
 }
 
 async function criarProdutoRapido() {
-    const precoBruto = document.getElementById('inputProdutoPreco').value;
+    const precoBruto = document.getElementById('inputProdutoRapidoPreco').value;
     const formData = {
         nome: document.getElementById('inputProdutoRapidoNome').value,
         categoria: document.getElementById('inputProdutoRapidoCategoria').value,
