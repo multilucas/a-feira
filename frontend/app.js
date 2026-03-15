@@ -591,6 +591,7 @@ function abrirModalEditarItem(listaId, produtoId) {
                 document.getElementById('inputEditarItemListaId').value = parseInt(listaId);
                 document.getElementById('editarItemProdutoNome').textContent = produto.nome;
                 document.getElementById('inputEditarItemQuantidade').value = itemData.quantidade;
+                document.getElementById('inputEditarItemPreco').value = produto.preco_unidade;
                 document.getElementById('inputEditarItemChecked').checked = itemData.checked;
 
                 openModal('modalEditarItem');
@@ -608,6 +609,7 @@ async function salvarEdicaoItem(e) {
     const listaId = parseInt(document.getElementById('inputEditarItemListaId').value);
     const produtoId = parseInt(document.getElementById('inputEditarItemId').value);
     const quantidade = parseFloat(document.getElementById('inputEditarItemQuantidade').value);
+    const preco_unidade = parseFloat(document.getElementById('inputEditarItemPreco').value);
     const checkedAtual = document.getElementById('inputEditarItemChecked').checked;
 
     if (quantidade <= 0) {
@@ -616,12 +618,12 @@ async function salvarEdicaoItem(e) {
     }
 
     try {
-        // Atualizar quantidade
+        // Atualizar quantidade e preço
         await fetch(`${API_BASE}/listas/${listaId}/itens/${produtoId}/quantidade`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             credentials: 'include',
-            body: JSON.stringify({ quantidade })
+            body: JSON.stringify({ quantidade, preco_unidade })
         });
 
         // Se checkbox foi alterado, fazer toggle
