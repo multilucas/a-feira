@@ -391,7 +391,7 @@ def toggle_item(lista_id, produto_id):
 @app.route('/api/listas/<int:lista_id>/itens/<int:produto_id>/quantidade', methods=['PUT'])
 @login_required
 def update_item_quantidade(lista_id, produto_id):
-    """Atualiza quantidade do item"""
+    """Atualiza quantidade e preço do item"""
     try:
         lista = ShoppingList.query.filter_by(id=lista_id, user_id=request.user.id).first()
         
@@ -412,17 +412,40 @@ def update_item_quantidade(lista_id, produto_id):
         if not item:
             return jsonify({"error": "Item não encontrado"}), 404
         
-        item.quantidade = float(data['quantidade'])
+        # Validação e atualização de quantidade
+        try:
+            nova_quantidade = float(data['quantidade'])
+            if nova_quantidade <= 0:
+                return jsonify({"error": "Quantidade deve ser maior que 0"}), 400
+            item.quantidade = nova_quantidade
+        except (ValueError, TypeError):
+            return jsonify({"error": "Quantidade deve ser um número válido"}), 400
         
+        # Validação e atualização de preco_unidade
         if 'preco_unidade' in data:
-            item.produto.preco_unidade = float(data['preco_unidade'])
+            try:
+                novo_preco = float(data['preco_unidade'])
+                if novo_preco < 0:
+                    return jsonify({"error": "Preço não pode ser negativo"}), 400
+                
+                # Validação se produto existe
+                if not item.produto:
+                    return jsonify({"error": "Produto não encontrado"}), 404
+                
+                preco_antigo = item.produto.preco_unidade
+                item.produto.preco_unidade = novo_preco
+                print(f"[UPDATE_ITEM] Produto ID {produto_id}: Preço atualizado de {preco_antigo} para {novo_preco}")
+            except (ValueError, TypeError):
+                return jsonify({"error": "Preço deve ser um número válido"}), 400
         
         db.session.commit()
+        print(f"[UPDATE_ITEM] Item {produto_id} da lista {lista_id} atualizado com sucesso")
         
         return jsonify(lista.to_dict()), 200
     
     except Exception as e:
         db.session.rollback()
+        print(f"[ERROR_UPDATE_ITEM] {str(e)}")
         return jsonify({"error": str(e)}), 500
 
 

@@ -3,6 +3,8 @@
 # A Feira - Start Server Script
 # Usage: bash start.sh
 
+fuser -k 5000/tcp && ./run.sh
+
 set -e  # Exit on any error
 
 PROJECT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"

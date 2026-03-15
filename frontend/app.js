@@ -608,23 +608,49 @@ async function salvarEdicaoItem(e) {
 
     const listaId = parseInt(document.getElementById('inputEditarItemListaId').value);
     const produtoId = parseInt(document.getElementById('inputEditarItemId').value);
-    const quantidade = parseFloat(document.getElementById('inputEditarItemQuantidade').value);
-    const preco_unidade = parseFloat(document.getElementById('inputEditarItemPreco').value);
-    const checkedAtual = document.getElementById('inputEditarItemChecked').checked;
-
-    if (quantidade <= 0) {
-        alert('Quantidade deve ser maior que 0');
+    
+    // Validação de quantidade
+    const quantidadeInput = document.getElementById('inputEditarItemQuantidade').value;
+    const quantidade = parseFloat(quantidadeInput);
+    
+    if (!quantidadeInput || isNaN(quantidade) || quantidade <= 0) {
+        alert('Quantidade deve ser um número maior que 0');
         return;
     }
+    
+    // Validação de preço
+    const precoInput = document.getElementById('inputEditarItemPreco').value;
+    const preco_unidade = precoInput ? parseFloat(precoInput) : null;
+    
+    if (preco_unidade === null || isNaN(preco_unidade) || preco_unidade < 0) {
+        alert('Preço inválido. Deve ser um número não-negativo');
+        return;
+    }
+    
+    const checkedAtual = document.getElementById('inputEditarItemChecked').checked;
 
     try {
+        // Montar payload
+        const payload = { quantidade, preco_unidade };
+        console.log('[SAVE_ITEM] Enviando para backend:', payload);
+        
         // Atualizar quantidade e preço
-        await fetch(`${API_BASE}/listas/${listaId}/itens/${produtoId}/quantidade`, {
+        const response = await fetch(`${API_BASE}/listas/${listaId}/itens/${produtoId}/quantidade`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             credentials: 'include',
-            body: JSON.stringify({ quantidade, preco_unidade })
+            body: JSON.stringify(payload)
         });
+
+        // Verificar erro na resposta
+        if (!response.ok) {
+            const errorData = await response.json();
+            console.error('[ERROR_SAVE_ITEM] Erro do backend:', errorData);
+            alert('Erro ao salvar: ' + (errorData.error || 'Desconhecido'));
+            return;
+        }
+        
+        console.log('[SAVE_ITEM] Item salvo com sucesso');
 
         // Se checkbox foi alterado, fazer toggle
         // Preciso buscar o estado original para saber se mudou
@@ -639,8 +665,8 @@ async function salvarEdicaoItem(e) {
         closeAllModals();
         loadLista(listaId);
     } catch (error) {
-        console.error('Erro:', error);
-        alert('Erro ao salvar item');
+        console.error('[ERROR_SAVE_ITEM] Erro na requisição:', error);
+        alert('Erro ao salvar item: ' + error.message);
     }
 }
 
