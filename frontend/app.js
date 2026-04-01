@@ -5,6 +5,8 @@ const API_BASE = `${window.location.protocol}//${window.location.host}/api`;
 let listaAtualId = null;
 let produtosCache = [];
 let currentUser = null;
+let listasCache = [];
+let syncController = null;
 
 // ========== INICIALIZAÇÃO ==========
 
@@ -19,7 +21,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     currentUser = user;
     initTheme();
     initEventListeners();
-    loadListas();
+    initOfflineSync();
+    await loadListas();
     updateUserInfo();
 });
 
@@ -31,11 +34,21 @@ async function checkAuth() {
             credentials: 'include'
         });
         if (response.ok) {
-            return await response.json();
+            const user = await response.json();
+            if (window.OfflineStore) {
+                window.OfflineStore.saveAuthSession(user);
+            }
+            return user;
         }
         return null;
     } catch (error) {
         console.error('Erro ao verificar autenticação:', error);
+        if (window.OfflineStore) {
+            const fallback = window.OfflineStore.getLastAuthSession();
+            if (fallback) {
+                return fallback;
+            }
+        }
         return null;
     }
 }
@@ -46,9 +59,117 @@ async function logout() {
             method: 'POST',
             credentials: 'include'
         });
-        window.location.href = '/login.html';
     } catch (error) {
         console.error('Erro ao fazer logout:', error);
+    }
+
+    if (window.OfflineStore && currentUser?.id) {
+        window.OfflineStore.clearAuthSession(currentUser.id);
+    }
+    window.location.href = '/login.html';
+}
+
+function initOfflineSync() {
+    if (!window.SyncManager || !window.OfflineStore) return;
+
+    setConnectionStatus(navigator.onLine);
+    const pending = window.OfflineStore.getQueue(currentUser.id).length;
+    updateSyncStatus(pending, false);
+
+    syncController = window.SyncManager.init({
+        apiBase: API_BASE,
+        getCurrentUser: () => currentUser,
+        onConnectivityChange: ({ online }) => {
+            setConnectionStatus(online);
+        },
+        onStatusChange: ({ pending: p, syncing }) => {
+            updateSyncStatus(p, syncing);
+        },
+        onSyncApplied: async (result) => {
+            applyIdMappings(result.id_mappings || {});
+            await loadProdutos();
+            await loadListas();
+            if (listaAtualId) {
+                await loadLista(listaAtualId);
+            }
+        }
+    });
+}
+
+function setConnectionStatus(online) {
+    const el = document.getElementById('connectionStatus');
+    if (!el) return;
+    el.textContent = online ? 'Online' : 'Offline';
+}
+
+function updateSyncStatus(pending, syncing) {
+    const el = document.getElementById('syncStatus');
+    if (!el) return;
+
+    if (syncing) {
+        el.textContent = `Sincronizando ${pending}...`;
+        return;
+    }
+
+    if (pending > 0) {
+        el.textContent = `${pending} pendente(s)`;
+        return;
+    }
+
+    el.textContent = 'Sem pendencias';
+}
+
+function enqueueOperation(type, payload) {
+    if (!window.OfflineStore || !currentUser?.id) return;
+    const op = {
+        operation_id: window.OfflineStore.makeOperationId(),
+        type,
+        payload,
+        ts: Date.now()
+    };
+    const queue = window.OfflineStore.pushQueue(currentUser.id, op);
+    updateSyncStatus(queue.length, false);
+}
+
+function applyIdMappings(mappings) {
+    if (!window.OfflineStore || !currentUser?.id) return;
+
+    const productMap = mappings.products || {};
+    const listMap = mappings.lists || {};
+    if (!Object.keys(productMap).length && !Object.keys(listMap).length) return;
+
+    produtosCache = produtosCache.map((p) => {
+        const newId = productMap[p.id];
+        return newId ? { ...p, id: newId } : p;
+    });
+
+    listasCache = listasCache.map((lista) => {
+        const mappedListId = listMap[lista.id] || lista.id;
+        return {
+            ...lista,
+            id: mappedListId,
+            itens: (lista.itens || []).map((item) => ({
+                ...item,
+                produto_id: productMap[item.produto_id] || item.produto_id
+            }))
+        };
+    });
+
+    window.OfflineStore.saveProdutos(currentUser.id, produtosCache);
+    window.OfflineStore.saveListas(currentUser.id, listasCache);
+
+    const pending = window.OfflineStore.getQueue(currentUser.id);
+    const remappedPending = pending.map((op) => {
+        const payload = { ...(op.payload || {}) };
+        if (payload.id && productMap[payload.id]) payload.id = productMap[payload.id];
+        if (payload.produto_id && productMap[payload.produto_id]) payload.produto_id = productMap[payload.produto_id];
+        if (payload.lista_id && listMap[payload.lista_id]) payload.lista_id = listMap[payload.lista_id];
+        return { ...op, payload };
+    });
+    window.OfflineStore.replaceQueue(currentUser.id, remappedPending);
+
+    if (listMap[listaAtualId]) {
+        listaAtualId = listMap[listaAtualId];
     }
 }
 
@@ -228,10 +349,20 @@ async function loadListas() {
         const response = await fetch(`${API_BASE}/listas`, {
             credentials: 'include'
         });
+        if (!response.ok) throw new Error('Falha ao carregar listas');
+
         const listas = await response.json();
-        renderListas(listas);
+        listasCache = listas;
+        if (window.OfflineStore && currentUser?.id) {
+            window.OfflineStore.saveListas(currentUser.id, listas);
+        }
+        renderListas(listasCache);
     } catch (error) {
         console.error('Erro ao carregar listas:', error);
+        if (window.OfflineStore && currentUser?.id) {
+            listasCache = window.OfflineStore.getListas(currentUser.id);
+            renderListas(listasCache);
+        }
     }
 }
 
@@ -264,6 +395,20 @@ async function criarNovaLista() {
         return;
     }
 
+    const tempId = window.OfflineStore ? window.OfflineStore.makeTempId('list') : `tmp_list_${Date.now()}`;
+    const localLista = { id: tempId, nome, itens: [] };
+    listasCache = [...listasCache, localLista];
+    if (window.OfflineStore && currentUser?.id) {
+        window.OfflineStore.saveListas(currentUser.id, listasCache);
+    }
+    closeAllModals();
+    renderListas(listasCache);
+
+    if (!navigator.onLine) {
+        enqueueOperation('create_list', { temp_id: tempId, nome });
+        return;
+    }
+
     try {
         const response = await fetch(`${API_BASE}/listas`, {
             method: 'POST',
@@ -273,14 +418,13 @@ async function criarNovaLista() {
         });
 
         if (response.ok) {
-            closeAllModals();
-            loadListas();
+            await loadListas();
         } else {
-            alert('Erro ao criar lista');
+            enqueueOperation('create_list', { temp_id: tempId, nome });
         }
     } catch (error) {
         console.error('Erro:', error);
-        alert('Erro ao criar lista');
+        enqueueOperation('create_list', { temp_id: tempId, nome });
     }
 }
 
@@ -296,13 +440,27 @@ async function abrirLista(listaId) {
         const response = await fetch(`${API_BASE}/listas/${listaId}`, {
             credentials: 'include'
         });
+        if (!response.ok) throw new Error('Erro ao abrir lista');
         const lista = await response.json();
+        const idx = listasCache.findIndex((l) => String(l.id) === String(lista.id));
+        if (idx >= 0) listasCache[idx] = lista;
+        else listasCache.push(lista);
+
+        if (window.OfflineStore && currentUser?.id) {
+            window.OfflineStore.saveListas(currentUser.id, listasCache);
+        }
         
         document.getElementById('listaDetalheNome').textContent = lista.nome;
         renderItensLista(lista);
         switchPage('lista-detalhe');
     } catch (error) {
         console.error('Erro ao abrir lista:', error);
+        const lista = listasCache.find((l) => String(l.id) === String(listaId));
+        if (lista) {
+            document.getElementById('listaDetalheNome').textContent = lista.nome;
+            renderItensLista(lista);
+            switchPage('lista-detalhe');
+        }
     }
 }
 
@@ -372,9 +530,42 @@ function calcularTotais(itens) {
     document.getElementById('totalCarrinho').textContent = `R$ ${totalCarrinho.toFixed(2)}`;
 }
 
+function getListaLocal(listaId) {
+    return listasCache.find((l) => String(l.id) === String(listaId));
+}
+
+function saveListaLocal(lista) {
+    const idx = listasCache.findIndex((l) => String(l.id) === String(lista.id));
+    if (idx >= 0) {
+        listasCache[idx] = lista;
+    } else {
+        listasCache.push(lista);
+    }
+
+    if (window.OfflineStore && currentUser?.id) {
+        window.OfflineStore.saveListas(currentUser.id, listasCache);
+    }
+}
+
 // ========== ITENS DA LISTA ==========
 
 async function toggleItem(listaId, produtoId) {
+    const localLista = getListaLocal(listaId);
+    if (!localLista) return;
+
+    const localItem = (localLista.itens || []).find((item) => String(item.produto_id) === String(produtoId));
+    if (!localItem) return;
+
+    localItem.checked = !localItem.checked;
+    saveListaLocal(localLista);
+    renderItensLista(localLista);
+
+    const payload = { lista_id: listaId, produto_id: produtoId, checked: localItem.checked };
+    if (!navigator.onLine) {
+        enqueueOperation('toggle_item', payload);
+        return;
+    }
+
     try {
         const response = await fetch(`${API_BASE}/listas/${listaId}/itens/${produtoId}/toggle`, {
             method: 'PUT',
@@ -383,10 +574,14 @@ async function toggleItem(listaId, produtoId) {
 
         if (response.ok) {
             const lista = await response.json();
+            saveListaLocal(lista);
             renderItensLista(lista);
+        } else {
+            enqueueOperation('toggle_item', payload);
         }
     } catch (error) {
         console.error('Erro:', error);
+        enqueueOperation('toggle_item', payload);
     }
 }
 
@@ -394,6 +589,20 @@ async function updateQuantidade(listaId, produtoId, novaQuantidade) {
     if (!novaQuantidade || novaQuantidade <= 0) {
         alert('Quantidade deve ser maior que 0');
         loadLista(listaId);
+        return;
+    }
+
+    const localLista = getListaLocal(listaId);
+    const localItem = localLista?.itens?.find((item) => String(item.produto_id) === String(produtoId));
+    if (localItem) {
+        localItem.quantidade = parseFloat(novaQuantidade);
+        saveListaLocal(localLista);
+        renderItensLista(localLista);
+    }
+
+    const payload = { lista_id: listaId, produto_id: produtoId, quantidade: parseFloat(novaQuantidade) };
+    if (!navigator.onLine) {
+        enqueueOperation('update_item_quantidade', payload);
         return;
     }
 
@@ -407,15 +616,32 @@ async function updateQuantidade(listaId, produtoId, novaQuantidade) {
 
         if (response.ok) {
             const lista = await response.json();
+            saveListaLocal(lista);
             renderItensLista(lista);
+        } else {
+            enqueueOperation('update_item_quantidade', payload);
         }
     } catch (error) {
         console.error('Erro:', error);
+        enqueueOperation('update_item_quantidade', payload);
     }
 }
 
 async function removeItem(listaId, produtoId) {
     if (!confirm('Remover este item?')) return;
+
+    const localLista = getListaLocal(listaId);
+    if (localLista) {
+        localLista.itens = (localLista.itens || []).filter((item) => String(item.produto_id) !== String(produtoId));
+        saveListaLocal(localLista);
+        renderItensLista(localLista);
+    }
+
+    const payload = { lista_id: listaId, produto_id: produtoId };
+    if (!navigator.onLine) {
+        enqueueOperation('remove_item', payload);
+        return;
+    }
 
     try {
         const response = await fetch(`${API_BASE}/listas/${listaId}/itens/${produtoId}`, {
@@ -425,10 +651,14 @@ async function removeItem(listaId, produtoId) {
 
         if (response.ok) {
             const lista = await response.json();
+            saveListaLocal(lista);
             renderItensLista(lista);
+        } else {
+            enqueueOperation('remove_item', payload);
         }
     } catch (error) {
         console.error('Erro:', error);
+        enqueueOperation('remove_item', payload);
     }
 }
 
@@ -437,10 +667,19 @@ async function loadLista(listaId) {
         const response = await fetch(`${API_BASE}/listas/${listaId}`, {
             credentials: 'include'
         });
+        if (!response.ok) throw new Error('Erro ao carregar lista');
         const lista = await response.json();
+        const idx = listasCache.findIndex((l) => String(l.id) === String(lista.id));
+        if (idx >= 0) listasCache[idx] = lista;
+        else listasCache.push(lista);
+        if (window.OfflineStore && currentUser?.id) {
+            window.OfflineStore.saveListas(currentUser.id, listasCache);
+        }
         renderItensLista(lista);
     } catch (error) {
         console.error('Erro ao carregar lista:', error);
+        const lista = listasCache.find((l) => String(l.id) === String(listaId));
+        if (lista) renderItensLista(lista);
     }
 }
 
@@ -451,13 +690,24 @@ async function loadProdutos() {
         const response = await fetch(`${API_BASE}/produtos`, {
             credentials: 'include'
         });
+        if (!response.ok) throw new Error('Erro ao carregar produtos');
         produtosCache = await response.json();
+        if (window.OfflineStore && currentUser?.id) {
+            window.OfflineStore.saveProdutos(currentUser.id, produtosCache);
+        }
         const container = document.getElementById('produtosContainer');
         if (container) {
             renderProdutos(produtosCache);
         }
     } catch (error) {
         console.error('Erro ao carregar produtos:', error);
+        if (window.OfflineStore && currentUser?.id) {
+            produtosCache = window.OfflineStore.getProdutos(currentUser.id);
+            const container = document.getElementById('produtosContainer');
+            if (container) {
+                renderProdutos(produtosCache);
+            }
+        }
     }
 }
 
@@ -513,33 +763,66 @@ async function criarNovoProduto(e) {
         return;
     }
 
+    const isEdit = !!produtoId;
+    if (isEdit) {
+        const idx = produtosCache.findIndex((p) => String(p.id) === String(produtoId));
+        if (idx >= 0) {
+            produtosCache[idx] = { ...produtosCache[idx], ...formData, id: produtosCache[idx].id };
+        }
+    } else {
+        const tempId = window.OfflineStore ? window.OfflineStore.makeTempId('product') : `tmp_product_${Date.now()}`;
+        produtosCache.push({ id: tempId, ...formData });
+        formData.temp_id = tempId;
+    }
+
+    if (window.OfflineStore && currentUser?.id) {
+        window.OfflineStore.saveProdutos(currentUser.id, produtosCache);
+    }
+
+    closeAllModals();
+    renderProdutos(produtosCache);
+
+    if (!navigator.onLine) {
+        enqueueOperation(isEdit ? 'update_product' : 'create_product', isEdit ? { id: produtoId, ...formData } : formData);
+        return;
+    }
+
     try {
-        // Se tem ID, é edição; senão, é criação
-        const method = produtoId ? 'PUT' : 'POST';
-        const url = produtoId ? `${API_BASE}/produtos/${produtoId}` : `${API_BASE}/produtos`;
+        const method = isEdit ? 'PUT' : 'POST';
+        const url = isEdit ? `${API_BASE}/produtos/${produtoId}` : `${API_BASE}/produtos`;
 
         const response = await fetch(url, {
-            method: method,
+            method,
             headers: { 'Content-Type': 'application/json' },
             credentials: 'include',
             body: JSON.stringify(formData)
         });
 
         if (response.ok) {
-            closeAllModals();
-            loadProdutos();
+            await loadProdutos();
         } else {
-            const data = await response.json();
-            alert(`Erro: ${data.error || 'Não foi possível salvar o produto'}`);
+            enqueueOperation(isEdit ? 'update_product' : 'create_product', isEdit ? { id: produtoId, ...formData } : formData);
         }
     } catch (error) {
         console.error('Erro:', error);
-        alert('Erro ao salvar produto');
+        enqueueOperation(isEdit ? 'update_product' : 'create_product', isEdit ? { id: produtoId, ...formData } : formData);
     }
 }
 
 async function deleteProduto(produtoId) {
     if (!confirm('Deletar este produto?')) return;
+
+    produtosCache = produtosCache.filter((p) => String(p.id) !== String(produtoId));
+    if (window.OfflineStore && currentUser?.id) {
+        window.OfflineStore.saveProdutos(currentUser.id, produtosCache);
+    }
+    renderProdutos(produtosCache);
+
+    const payload = { id: produtoId };
+    if (!navigator.onLine) {
+        enqueueOperation('delete_product', payload);
+        return;
+    }
 
     try {
         const response = await fetch(`${API_BASE}/produtos/${produtoId}`, {
@@ -548,69 +831,53 @@ async function deleteProduto(produtoId) {
         });
 
         if (response.ok) {
-            loadProdutos();
+            await loadProdutos();
         } else {
-            alert('Erro ao deletar produto');
+            enqueueOperation('delete_product', payload);
         }
     } catch (error) {
         console.error('Erro:', error);
-        alert('Erro ao deletar produto');
+        enqueueOperation('delete_product', payload);
     }
 }
 
 // ========== EDIÇÃO DE ITENS DA LISTA ==========
 
 function abrirModalEditarItem(listaId, produtoId) {
-    const item = listaAtualId && listaAtualId === parseInt(listaId) 
-        ? document.querySelector(`div[onclick="abrirModalEditarItem('${listaId}', '${produtoId}')"]`)
-        : null;
-    
-    // Buscar item nos dados
-    let itemData = null;
-    let listaData = null;
-    
-    // Carrega lista completa para achar o item
-    const listaElement = document.getElementById('listaDetalheNome');
-    if (listaElement) {
-        fetch(`${API_BASE}/listas/${listaId}`, { credentials: 'include' })
-            .then(r => r.json())
-            .then(lista => {
-                listaData = lista;
-                itemData = lista.itens.find(i => i.produto_id === parseInt(produtoId));
-                
-                if (!itemData) {
-                    alert('Item não encontrado');
-                    return;
-                }
-
-                const produto = produtosCache.find(p => p.id === parseInt(produtoId));
-                if (!produto) {
-                    alert('Produto não encontrado');
-                    return;
-                }
-
-                // Preencher modal
-                document.getElementById('inputEditarItemId').value = parseInt(produtoId);
-                document.getElementById('inputEditarItemListaId').value = parseInt(listaId);
-                document.getElementById('editarItemProdutoNome').textContent = produto.nome;
-                document.getElementById('inputEditarItemQuantidade').value = itemData.quantidade;
-                document.getElementById('inputEditarItemPreco').value = produto.preco_unidade;
-                document.getElementById('inputEditarItemChecked').checked = itemData.checked;
-
-                openModal('modalEditarItem');
-            })
-            .catch(err => {
-                console.error('Erro:', err);
-                alert('Erro ao carregar item');
-            });
+    const lista = getListaLocal(listaId);
+    if (!lista) {
+        alert('Lista não encontrada');
+        return;
     }
+
+    const itemData = (lista.itens || []).find((i) => String(i.produto_id) === String(produtoId));
+    if (!itemData) {
+        alert('Item não encontrado');
+        return;
+    }
+
+    const produto = produtosCache.find((p) => String(p.id) === String(produtoId));
+    if (!produto) {
+        alert('Produto não encontrado');
+        return;
+    }
+
+    // Preencher modal
+    document.getElementById('inputEditarItemId').value = produtoId;
+    document.getElementById('inputEditarItemListaId').value = listaId;
+    document.getElementById('editarItemProdutoNome').textContent = produto.nome;
+    document.getElementById('inputEditarItemQuantidade').value = itemData.quantidade;
+    document.getElementById('inputEditarItemPreco').value = produto.preco_unidade;
+    document.getElementById('inputEditarItemChecked').checked = itemData.checked;
+
+    openModal('modalEditarItem');
 }
 
 async function salvarEdicaoItem(e) {
     e.preventDefault();
 
-    const listaId = parseInt(document.getElementById('inputEditarItemListaId').value);
-    const produtoId = parseInt(document.getElementById('inputEditarItemId').value);
+    const listaId = document.getElementById('inputEditarItemListaId').value;
+    const produtoId = document.getElementById('inputEditarItemId').value;
     
     // Validação de quantidade
     const quantidadeInput = document.getElementById('inputEditarItemQuantidade').value;
@@ -632,54 +899,84 @@ async function salvarEdicaoItem(e) {
     
     const checkedAtual = document.getElementById('inputEditarItemChecked').checked;
 
+    const payload = { lista_id: listaId, produto_id: produtoId, quantidade, preco_unidade };
+
+    const localLista = getListaLocal(listaId);
+    const localItem = localLista?.itens?.find((item) => String(item.produto_id) === String(produtoId));
+    const localProduct = produtosCache.find((p) => String(p.id) === String(produtoId));
+
+    if (localItem) {
+        localItem.quantidade = quantidade;
+        localItem.checked = checkedAtual;
+        saveListaLocal(localLista);
+    }
+    if (localProduct) {
+        localProduct.preco_unidade = preco_unidade;
+        if (window.OfflineStore && currentUser?.id) {
+            window.OfflineStore.saveProdutos(currentUser.id, produtosCache);
+        }
+    }
+
+    closeAllModals();
+    if (localLista) renderItensLista(localLista);
+
+    if (!navigator.onLine) {
+        enqueueOperation('update_item_quantidade', payload);
+        enqueueOperation('toggle_item', { lista_id: listaId, produto_id: produtoId, checked: checkedAtual });
+        return;
+    }
+
     try {
-        // Montar payload
-        const payload = { quantidade, preco_unidade };
-        console.log('[SAVE_ITEM] Enviando para backend:', payload);
-        
-        // Atualizar quantidade e preço
         const response = await fetch(`${API_BASE}/listas/${listaId}/itens/${produtoId}/quantidade`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             credentials: 'include',
-            body: JSON.stringify(payload)
+            body: JSON.stringify({ quantidade, preco_unidade })
         });
 
-        // Verificar erro na resposta
         if (!response.ok) {
-            const errorData = await response.json();
-            console.error('[ERROR_SAVE_ITEM] Erro do backend:', errorData);
-            alert('Erro ao salvar: ' + (errorData.error || 'Desconhecido'));
+            enqueueOperation('update_item_quantidade', payload);
+            enqueueOperation('toggle_item', { lista_id: listaId, produto_id: produtoId, checked: checkedAtual });
             return;
         }
-        
-        console.log('[SAVE_ITEM] Item salvo com sucesso');
 
-        // Atualizar cache de produtos para refletir novo preço
-        await loadProdutos();
+        const lista = await response.json();
+        saveListaLocal(lista);
 
-        // Se checkbox foi alterado, fazer toggle
-        const listaResp = await fetch(`${API_BASE}/listas/${listaId}`, { credentials: 'include' });
-        const lista = await listaResp.json();
-        const itemOriginal = lista.itens.find(i => i.produto_id === produtoId);
-        
-        if (itemOriginal && itemOriginal.checked !== checkedAtual) {
+        const serverItem = lista.itens.find((i) => String(i.produto_id) === String(produtoId));
+        if (serverItem && serverItem.checked !== checkedAtual) {
             await toggleItem(listaId, produtoId);
         }
 
-        closeAllModals();
-        loadLista(listaId);
+        await loadProdutos();
+        renderItensLista(lista);
     } catch (error) {
         console.error('[ERROR_SAVE_ITEM] Erro na requisição:', error);
-        alert('Erro ao salvar item: ' + error.message);
+        enqueueOperation('update_item_quantidade', payload);
+        enqueueOperation('toggle_item', { lista_id: listaId, produto_id: produtoId, checked: checkedAtual });
     }
 }
 
 async function deletarItemModal() {
-    const listaId = parseInt(document.getElementById('inputEditarItemListaId').value);
-    const produtoId = parseInt(document.getElementById('inputEditarItemId').value);
+    const listaId = document.getElementById('inputEditarItemListaId').value;
+    const produtoId = document.getElementById('inputEditarItemId').value;
 
     if (!confirm('Deletar este item?')) return;
+
+    const localLista = getListaLocal(listaId);
+    if (localLista) {
+        localLista.itens = (localLista.itens || []).filter((i) => String(i.produto_id) !== String(produtoId));
+        saveListaLocal(localLista);
+    }
+
+    closeAllModals();
+    if (localLista) renderItensLista(localLista);
+
+    const payload = { lista_id: listaId, produto_id: produtoId };
+    if (!navigator.onLine) {
+        enqueueOperation('remove_item', payload);
+        return;
+    }
 
     try {
         const response = await fetch(`${API_BASE}/listas/${listaId}/itens/${produtoId}`, {
@@ -688,14 +985,13 @@ async function deletarItemModal() {
         });
 
         if (response.ok) {
-            closeAllModals();
-            loadLista(listaId);
+            await loadLista(listaId);
         } else {
-            alert('Erro ao deletar item');
+            enqueueOperation('remove_item', payload);
         }
     } catch (error) {
         console.error('Erro:', error);
-        alert('Erro ao deletar item');
+        enqueueOperation('remove_item', payload);
     }
 }
 
@@ -756,6 +1052,30 @@ async function criarProdutoRapido() {
         return;
     }
 
+    const tempId = window.OfflineStore ? window.OfflineStore.makeTempId('product') : `tmp_product_${Date.now()}`;
+    const novoProdutoLocal = { id: tempId, ...formData };
+    produtosCache.push(novoProdutoLocal);
+
+    const lista = getListaLocal(listaAtualId);
+    const quantidadeItem = parseFloat(document.getElementById('inputQuantidadeItem').value) || formData.quantidade;
+    if (lista) {
+        lista.itens = lista.itens || [];
+        lista.itens.push({ produto_id: tempId, quantidade: quantidadeItem, checked: false });
+        saveListaLocal(lista);
+    }
+    if (window.OfflineStore && currentUser?.id) {
+        window.OfflineStore.saveProdutos(currentUser.id, produtosCache);
+    }
+
+    closeAllModals();
+    if (lista) renderItensLista(lista);
+
+    if (!navigator.onLine) {
+        enqueueOperation('create_product', { ...formData, temp_id: tempId });
+        enqueueOperation('add_item', { lista_id: listaAtualId, produto_id: tempId, quantidade: quantidadeItem });
+        return;
+    }
+
     try {
         const response = await fetch(`${API_BASE}/produtos`, {
             method: 'POST',
@@ -764,25 +1084,26 @@ async function criarProdutoRapido() {
             body: JSON.stringify(formData)
         });
 
-        if (response.ok) {
-            const novoProduto = await response.json();
-            await loadProdutos();  // Espera produtos carregarem
-            
-            // Adiciona à lista automaticamente
-            const quantidadeItem = parseFloat(document.getElementById('inputQuantidadeItem').value) || formData.quantidade;
-            await fetch(`${API_BASE}/listas/${listaAtualId}/itens`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                credentials: 'include',
-                body: JSON.stringify({ produto_id: novoProduto.id, quantidade: quantidadeItem })
-            });
-
-            closeAllModals();
-            loadLista(listaAtualId);
+        if (!response.ok) {
+            enqueueOperation('create_product', { ...formData, temp_id: tempId });
+            enqueueOperation('add_item', { lista_id: listaAtualId, produto_id: tempId, quantidade: quantidadeItem });
+            return;
         }
+
+        const novoProduto = await response.json();
+        await fetch(`${API_BASE}/listas/${listaAtualId}/itens`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({ produto_id: novoProduto.id, quantidade: quantidadeItem })
+        });
+
+        await loadProdutos();
+        await loadLista(listaAtualId);
     } catch (error) {
         console.error('Erro:', error);
-        alert('Erro ao criar produto');
+        enqueueOperation('create_product', { ...formData, temp_id: tempId });
+        enqueueOperation('add_item', { lista_id: listaAtualId, produto_id: tempId, quantidade: quantidadeItem });
     }
 }
 
@@ -797,6 +1118,28 @@ async function adicionarItemLista(e) {
         return;
     }
 
+    const localLista = getListaLocal(listaAtualId);
+    if (localLista) {
+        localLista.itens = localLista.itens || [];
+        const existing = localLista.itens.find((i) => String(i.produto_id) === String(produtoId));
+        if (existing) {
+            existing.quantidade = quantidade;
+            existing.checked = false;
+        } else {
+            localLista.itens.push({ produto_id: produtoId, quantidade, checked: false });
+        }
+        saveListaLocal(localLista);
+    }
+
+    closeAllModals();
+    if (localLista) renderItensLista(localLista);
+
+    const payload = { lista_id: listaAtualId, produto_id: produtoId, quantidade };
+    if (!navigator.onLine) {
+        enqueueOperation('add_item', payload);
+        return;
+    }
+
     try {
         const response = await fetch(`${API_BASE}/listas/${listaAtualId}/itens`, {
             method: 'POST',
@@ -808,14 +1151,13 @@ async function adicionarItemLista(e) {
         const data = await response.json();
 
         if (response.ok) {
-            closeAllModals();
-            loadLista(listaAtualId);
+            await loadLista(listaAtualId);
         } else {
             console.error('Erro ao adicionar:', data);
-            alert('Erro ao adicionar item: ' + (data.error || 'Desconhecido'));
+            enqueueOperation('add_item', payload);
         }
     } catch (error) {
         console.error('Erro:', error);
-        alert('Erro ao adicionar item: ' + error.message);
+        enqueueOperation('add_item', payload);
     }
 }

@@ -2,10 +2,10 @@ from flask import Flask, request, jsonify, send_from_directory, session, redirec
 from flask_cors import CORS
 from pathlib import Path
 from functools import wraps
-from datetime import timedelta
+from datetime import timedelta, datetime
 import os
 
-from models import db, User, Product, ShoppingList, ShoppingListItem
+from models import db, User, Product, ShoppingList, ShoppingListItem, SyncOperation
 
 # ========== SETUP ==========
 
@@ -473,6 +473,272 @@ def remove_item(lista_id, produto_id):
         
         return jsonify(lista.to_dict()), 200
     
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": str(e)}), 500
+
+
+def _resolve_temp_id(value, id_map):
+    """Resolve IDs temporarios enviados pelo cliente usando o mapa local do lote."""
+    if isinstance(value, str) and value.startswith('tmp_'):
+        return id_map.get(value)
+    return value
+
+
+@app.route('/api/sync/batch', methods=['POST'])
+@login_required
+def sync_batch():
+    """Sincroniza operacoes offline em lote com idempotencia por operation_id."""
+    try:
+        data = request.get_json() or {}
+        operations = data.get('operations', [])
+
+        if not isinstance(operations, list):
+            return jsonify({"error": "operations deve ser uma lista"}), 400
+
+        results = {
+            'successful': [],
+            'failed': [],
+            'id_mappings': {
+                'products': {},
+                'lists': {}
+            },
+            'server_timestamp': datetime.utcnow().isoformat() + 'Z'
+        }
+
+        product_id_map = {}
+        list_id_map = {}
+
+        for op in operations:
+            operation_id = str(op.get('operation_id', '')).strip()
+            operation_type = str(op.get('type', '')).strip()
+            payload = op.get('payload', {}) or {}
+
+            if not operation_id or not operation_type:
+                results['failed'].append({
+                    'operation_id': operation_id or None,
+                    'error': 'operation_id e type sao obrigatorios'
+                })
+                continue
+
+            existing = SyncOperation.query.filter_by(
+                user_id=request.user.id,
+                operation_id=operation_id
+            ).first()
+
+            if existing:
+                results['successful'].append({
+                    'operation_id': operation_id,
+                    'type': operation_type,
+                    'status': 'duplicate_ignored'
+                })
+                continue
+
+            sync_record = SyncOperation(
+                user_id=request.user.id,
+                operation_id=operation_id,
+                operation_type=operation_type,
+                payload=payload
+            )
+            db.session.add(sync_record)
+
+            try:
+                if operation_type == 'create_product':
+                    produto = Product(
+                        user_id=request.user.id,
+                        nome=str(payload.get('nome', '')).strip(),
+                        categoria=str(payload.get('categoria', '')).strip(),
+                        quantidade=float(payload.get('quantidade', 0)),
+                        unidade=str(payload.get('unidade', '')).strip(),
+                        preco_unidade=float(payload.get('preco_unidade', 0)),
+                        descricao=str(payload.get('descricao', '')).strip()
+                    )
+                    db.session.add(produto)
+                    db.session.flush()
+
+                    temp_id = payload.get('temp_id')
+                    if temp_id:
+                        product_id_map[temp_id] = produto.id
+                        results['id_mappings']['products'][temp_id] = produto.id
+
+                    results['successful'].append({
+                        'operation_id': operation_id,
+                        'type': operation_type,
+                        'resource_id': produto.id
+                    })
+
+                elif operation_type == 'update_product':
+                    product_id = _resolve_temp_id(payload.get('id'), product_id_map)
+                    produto = Product.query.filter_by(id=product_id, user_id=request.user.id).first()
+                    if not produto:
+                        raise ValueError('Produto nao encontrado')
+
+                    produto.nome = str(payload.get('nome', produto.nome)).strip()
+                    produto.categoria = str(payload.get('categoria', produto.categoria)).strip()
+                    produto.quantidade = float(payload.get('quantidade', produto.quantidade))
+                    produto.unidade = str(payload.get('unidade', produto.unidade)).strip()
+                    produto.preco_unidade = float(payload.get('preco_unidade', produto.preco_unidade))
+                    produto.descricao = str(payload.get('descricao', produto.descricao or '')).strip()
+
+                    results['successful'].append({
+                        'operation_id': operation_id,
+                        'type': operation_type,
+                        'resource_id': produto.id
+                    })
+
+                elif operation_type == 'delete_product':
+                    product_id = _resolve_temp_id(payload.get('id'), product_id_map)
+                    produto = Product.query.filter_by(id=product_id, user_id=request.user.id).first()
+                    if produto:
+                        db.session.delete(produto)
+
+                    results['successful'].append({
+                        'operation_id': operation_id,
+                        'type': operation_type,
+                        'resource_id': product_id
+                    })
+
+                elif operation_type == 'create_list':
+                    lista = ShoppingList(
+                        user_id=request.user.id,
+                        nome=str(payload.get('nome', '')).strip()
+                    )
+                    db.session.add(lista)
+                    db.session.flush()
+
+                    temp_id = payload.get('temp_id')
+                    if temp_id:
+                        list_id_map[temp_id] = lista.id
+                        results['id_mappings']['lists'][temp_id] = lista.id
+
+                    results['successful'].append({
+                        'operation_id': operation_id,
+                        'type': operation_type,
+                        'resource_id': lista.id
+                    })
+
+                elif operation_type == 'add_item':
+                    list_id = _resolve_temp_id(payload.get('lista_id'), list_id_map)
+                    product_id = _resolve_temp_id(payload.get('produto_id'), product_id_map)
+
+                    lista = ShoppingList.query.filter_by(id=list_id, user_id=request.user.id).first()
+                    if not lista:
+                        raise ValueError('Lista nao encontrada')
+
+                    produto = Product.query.filter_by(id=product_id, user_id=request.user.id).first()
+                    if not produto:
+                        raise ValueError('Produto nao encontrado')
+
+                    item = ShoppingListItem.query.filter_by(
+                        lista_id=lista.id,
+                        produto_id=produto.id
+                    ).first()
+
+                    quantidade = float(payload.get('quantidade', 1))
+                    if item:
+                        item.quantidade = quantidade
+                        item.checked = False
+                    else:
+                        db.session.add(ShoppingListItem(
+                            lista_id=lista.id,
+                            produto_id=produto.id,
+                            quantidade=quantidade,
+                            checked=False
+                        ))
+
+                    results['successful'].append({
+                        'operation_id': operation_id,
+                        'type': operation_type,
+                        'resource_id': f"{lista.id}:{produto.id}"
+                    })
+
+                elif operation_type == 'toggle_item':
+                    list_id = _resolve_temp_id(payload.get('lista_id'), list_id_map)
+                    product_id = _resolve_temp_id(payload.get('produto_id'), product_id_map)
+
+                    lista = ShoppingList.query.filter_by(id=list_id, user_id=request.user.id).first()
+                    if not lista:
+                        raise ValueError('Lista nao encontrada')
+
+                    item = ShoppingListItem.query.filter_by(
+                        lista_id=list_id,
+                        produto_id=product_id
+                    ).first()
+                    if not item:
+                        raise ValueError('Item nao encontrado')
+
+                    item.checked = bool(payload.get('checked', not item.checked))
+
+                    results['successful'].append({
+                        'operation_id': operation_id,
+                        'type': operation_type,
+                        'resource_id': f"{list_id}:{product_id}"
+                    })
+
+                elif operation_type == 'update_item_quantidade':
+                    list_id = _resolve_temp_id(payload.get('lista_id'), list_id_map)
+                    product_id = _resolve_temp_id(payload.get('produto_id'), product_id_map)
+
+                    lista = ShoppingList.query.filter_by(id=list_id, user_id=request.user.id).first()
+                    if not lista:
+                        raise ValueError('Lista nao encontrada')
+
+                    item = ShoppingListItem.query.filter_by(
+                        lista_id=list_id,
+                        produto_id=product_id
+                    ).first()
+                    if not item:
+                        raise ValueError('Item nao encontrado')
+
+                    item.quantidade = float(payload.get('quantidade', item.quantidade))
+
+                    if 'preco_unidade' in payload:
+                        produto = Product.query.filter_by(id=product_id, user_id=request.user.id).first()
+                        if produto:
+                            produto.preco_unidade = float(payload.get('preco_unidade', produto.preco_unidade))
+
+                    results['successful'].append({
+                        'operation_id': operation_id,
+                        'type': operation_type,
+                        'resource_id': f"{list_id}:{product_id}"
+                    })
+
+                elif operation_type == 'remove_item':
+                    list_id = _resolve_temp_id(payload.get('lista_id'), list_id_map)
+                    product_id = _resolve_temp_id(payload.get('produto_id'), product_id_map)
+
+                    lista = ShoppingList.query.filter_by(id=list_id, user_id=request.user.id).first()
+                    if not lista:
+                        raise ValueError('Lista nao encontrada')
+
+                    item = ShoppingListItem.query.filter_by(
+                        lista_id=list_id,
+                        produto_id=product_id
+                    ).first()
+                    if item:
+                        db.session.delete(item)
+
+                    results['successful'].append({
+                        'operation_id': operation_id,
+                        'type': operation_type,
+                        'resource_id': f"{list_id}:{product_id}"
+                    })
+
+                else:
+                    raise ValueError(f"Tipo de operacao nao suportado: {operation_type}")
+
+                db.session.commit()
+
+            except Exception as op_error:
+                db.session.rollback()
+                results['failed'].append({
+                    'operation_id': operation_id,
+                    'type': operation_type,
+                    'error': str(op_error)
+                })
+
+        return jsonify(results), 200
+
     except Exception as e:
         db.session.rollback()
         return jsonify({"error": str(e)}), 500

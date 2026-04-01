@@ -149,6 +149,12 @@
 
                 if (response.ok) {
                     localStorage.setItem('theme', data.user.theme);
+                    localStorage.setItem('last_user_id', String(data.user.id));
+                    localStorage.setItem(`offline_auth:${data.user.id}`, JSON.stringify({
+                        user: data.user,
+                        savedAt: Date.now(),
+                        expiresAt: Date.now() + (30 * 24 * 60 * 60 * 1000)
+                    }));
                     if (data.user.theme === 'dark') {
                         document.documentElement.classList.add('dark');
                     } else {
@@ -160,7 +166,7 @@
                     errorDiv.classList.remove('hidden');
                 }
             } catch (error) {
-                errorDiv.textContent = 'Erro ao conectar';
+                errorDiv.textContent = 'Sem internet. Login so funciona online; apos entrar, o app pode ser usado offline.';
                 errorDiv.classList.remove('hidden');
             }
         });
@@ -204,7 +210,7 @@
                     errorDiv.classList.remove('hidden');
                 }
             } catch (error) {
-                errorDiv.textContent = 'Erro ao conectar';
+                errorDiv.textContent = 'Sem internet. Cadastro so funciona online.';
                 errorDiv.classList.remove('hidden');
             }
         });

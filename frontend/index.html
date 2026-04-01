@@ -28,6 +28,10 @@
         <header class="bg-indigo-600 dark:bg-indigo-700 text-white p-4 sticky top-0 shadow-lg flex justify-between items-center">
             <h1 class="text-2xl font-bold">A Feira</h1>
             <div class="flex items-center gap-3">
+                <div class="text-xs text-right leading-tight">
+                    <p id="connectionStatus" class="font-semibold">Online</p>
+                    <p id="syncStatus" class="opacity-90">Sem pendencias</p>
+                </div>
                 <div class="text-sm text-right">
                     <p id="userGreeting" class="font-medium">Carregando...</p>
                 </div>
@@ -274,6 +278,8 @@
     <!-- Overlay para fechar modais -->
     <div id="modalOverlay" class="hidden fixed inset-0 z-40" onclick="closeAllModals()"></div>
 
+    <script src="offline-store.js"></script>
+    <script src="sync-manager.js"></script>
     <script src="app.js"></script>
 </body>
 </html>

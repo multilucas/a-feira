@@ -118,3 +118,29 @@ class ShoppingListItem(db.Model):
             'produto': self.produto.to_dict() if self.produto else None
         }
 
+
+class SyncOperation(db.Model):
+    """Registro de operacoes de sincronizacao para garantir idempotencia"""
+    __tablename__ = 'sync_operations'
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False, index=True)
+    operation_id = db.Column(db.String(64), nullable=False)
+    operation_type = db.Column(db.String(64), nullable=False)
+    payload = db.Column(db.JSON, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    __table_args__ = (
+        db.UniqueConstraint('user_id', 'operation_id', name='uq_sync_user_operation'),
+    )
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'user_id': self.user_id,
+            'operation_id': self.operation_id,
+            'operation_type': self.operation_type,
+            'payload': self.payload,
+            'created_at': self.created_at.isoformat() if self.created_at else None
+        }
+
